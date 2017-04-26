@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
@@ -22,12 +23,16 @@ import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.UnreadableException;
+import map.Dimashq;
+import map.Province;
+import map.ProvinceFactory;
 
 public class Division extends Agent{
 	private DivisionInfo divisionInfo;
 	private Orders orders;
 	private HashMap<AID, DivisionInfo> knownDivisions;
 	private Flag flag;
+	private map.Province location;
 	/////////////////////////// ZROBIÆ FLAGI DO WALKI - ZAJETY/WOLNY/ITD I REQUESTY PRZY WALCE
 //	private double aggrRecoSkill; //<0.1 - 1> for aggressive reconaissance
 //	private double antiRecoSkill; //<0.1 - 1> for anti-reconaissance
@@ -35,31 +40,62 @@ public class Division extends Agent{
 	protected void setup(){
 		Object[] args = getArguments();
 		divisionInfo = new DivisionInfo(args[0].toString(), args[1].toString(), args[2].toString(), args[3].toString());
+		location = map.ProvinceFactory.getProvince(args[4].toString());
 		orders = new Orders();
 		orders.setDefault(divisionInfo.getAllignment());
 		flag = Flag.DEFAULT;
 //		divisionInfo = new DivisionInfo();
 		knownDivisions = new HashMap<AID, DivisionInfo>();
 		
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sdName  = new ServiceDescription();
-		ServiceDescription sdAllignment  = new ServiceDescription();
-		sdName.setType("division");
-		sdAllignment.setType(divisionInfo.getAllignment().toString());
-		sdName.setName(getLocalName());
-		sdAllignment.setName(getLocalName());
-        System.out.println("Registering division"+divisionInfo.getAllignment().toString()+" named "+getLocalName());
-        dfd.addServices(sdName);
-        dfd.addServices(sdAllignment);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
+		registerAgent();
         
         addBehaviour(new Receiver());
         addBehaviour(new DivisionSearcher());
-        addBehaviour(new Reconaissance(this, 5000));
-        addBehaviour(new AttackSchedule(this, 15000));
+        addBehaviour(new Reconaissance(this, divisionInfo.getSpeed()*5));
+        addBehaviour(new AttackSchedule(this, divisionInfo.getSpeed()*15));
+        addBehaviour(new LocationChangerSchedule(this, divisionInfo.getSpeed()*30));
+	}
+	
+	private class LocationChangerSchedule extends TickerBehaviour{
+
+		public LocationChangerSchedule(Agent a, long period) {
+			super(a, period);
+		}
+
+		@Override
+		protected void onTick() {
+			if (flag == Flag.DEFAULT){
+				addBehaviour(new LocationChanger(myAgent, divisionInfo.getSpeed()*5));
+			}
+		}
+		
+	}
+	
+	private class LocationChanger extends WakerBehaviour{
+		
+		public LocationChanger(Agent a, long period) {
+			super(a, period);
+			// TODO Auto-generated constructor stub
+		}
+
+		@Override
+		protected void onWake() {
+			myAgent.addBehaviour(new DivisionSearcher());
+			if (knownDivisions.isEmpty()){
+				flag = Flag.RETREATING;
+				System.out.println("Moving "+getLocalName());
+				deregister();
+//				for (Province neighbor : location.getNeighbors().keySet()){
+//					System.out.println(neighbor.getProvinceName());
+					Division.this.location = ProvinceFactory.getProvince("Dimashq");
+//					break;
+//				}
+				flag = Flag.DEFAULT;
+				registerAgent();
+				System.out.print(" to "+location.getProvinceName());
+			}
+		}
+		
 	}
 	
 	protected class AttackSchedule extends TickerBehaviour{
@@ -71,9 +107,36 @@ public class Division extends Agent{
 
 		@Override
 		protected void onTick() {
-			myAgent.addBehaviour(new Target(myAgent, 7000));
+			myAgent.addBehaviour(new Target(myAgent, divisionInfo.getSpeed()*7));
 		}
 		
+	}
+	
+	protected class WakeSender extends WakerBehaviour{
+		private ACLMessage msg;
+		public WakeSender(ACLMessage msg, Agent a, long timeout) {
+			super(a, timeout);
+			this.msg = msg;
+		}
+		
+		@Override
+		public void onWake(){
+			send(msg);
+		}
+	}
+	
+	protected class WakeFlagSet extends WakerBehaviour{
+		private Flag flag;
+		public WakeFlagSet(Flag flag, Agent a, long timeout) {
+			super(a, timeout);
+			this.flag = flag;
+		}
+		
+		@Override
+		public void onWake(){
+			if (Division.this.flag != Flag.ATTACKING && Division.this.flag != Flag.DEFENDING){ Division.this.flag = flag;
+			System.out.println(myAgent.getLocalName()+" setting flag: "+flag.toString());}
+		}
 	}
 	
 	protected class Target extends WakerBehaviour{
@@ -82,12 +145,13 @@ public class Division extends Agent{
 		}
 
 		public void onWake(){
-			if (!knownDivisions.isEmpty()){
+			myAgent.addBehaviour(new DivisionSearcher());
+			if (!(knownDivisions.isEmpty()) && flag == Flag.DEFAULT){
 				AID target = new AID();
 				double value = 9999999;
 				for (AID agent : knownDivisions.keySet()){
+					if (knownDivisions.get(agent).getAllignment() != null){
 					if (knownDivisions.get(agent).getStrength() <= value && orders.getEnemies().contains(knownDivisions.get(agent).getAllignment())){ 
-						flag = Flag.ATTACKING;
 						value = knownDivisions.get(agent).getStrength();
 						target = agent;
 						//sending attack request
@@ -100,11 +164,12 @@ public class Division extends Agent{
 							msg.setContentObject(operation);
 						} 
 						catch (IOException e) {e.printStackTrace();}
-						send(msg);
-						System.out.println(myAgent.getLocalName()+" REQUESTs to attack "+agent.getLocalName());
+//						send(msg);
+						myAgent.addBehaviour(new WakeSender(msg, myAgent, divisionInfo.getSpeed()));
+//						System.out.println(myAgent.getLocalName()+" REQUESTs to attack "+agent.getLocalName());
 						break;
 					}
-				}
+				}}
 			}
 		}
 	}
@@ -117,7 +182,7 @@ public class Division extends Agent{
 		}
 		public void onTick(){
 			myAgent.addBehaviour(new DivisionSearcher());
-			System.out.println(myAgent.getLocalName() + "knows " + knownDivisions);
+//			System.out.println(myAgent.getLocalName() + "knows " + knownDivisions);
 			
 		}
 	}
@@ -126,7 +191,7 @@ public class Division extends Agent{
 		public void action(){
 			DFAgentDescription template = new DFAgentDescription();
 			ServiceDescription sd = new ServiceDescription();
-			sd.setType("division");
+			sd.setType("division@"+location.getProvinceName());
 			template.addServices(sd);
 			knownDivisions = searchDF(myAgent, template);
 			for (AID agent : knownDivisions.keySet()){
@@ -151,6 +216,8 @@ public class Division extends Agent{
     		if (msg!=null) {
     			try {
 					Object content = msg.getContentObject();
+					Operation chOp = ((Operation) content);
+					if (chOp.getValue() instanceof Damage) System.out.println(getLocalName()+" received "+(((Damage) chOp.getValue()).getDamageDealt()));
     			
 	    			switch (msg.getPerformative()){
 		    			case (ACLMessage.REQUEST):{
@@ -165,7 +232,6 @@ public class Division extends Agent{
 							            reply.setPerformative( ACLMessage.INFORM );
 							            reply.setContentObject(rep);
 							            send(reply);
-//							            System.out.println(myAgent.getLocalName()+" Sending "+OperationType.ALLIGNMENT_CHECK.toString()+" and "+divisionInfo.toString()+" to "+((AID) reply.getAllReceiver().next()).getLocalName());
 					    				break;}
 				    				case ATTACK:{
 				    					if (flag == Flag.ATTACKING || flag == Flag.DEFENDING || flag == Flag.HIDDEN || flag == Flag.RETREATING){
@@ -176,7 +242,7 @@ public class Division extends Agent{
 								            reply.setPerformative( ACLMessage.REFUSE );
 								            reply.setContentObject(rep);
 								            send(reply);
-								            System.out.println(myAgent.getLocalName()+" declines!");	            
+//								            System.out.println(myAgent.getLocalName()+" declines!");	            
 				    					} else if (flag == Flag.FORTIFIED || flag == Flag.DEFAULT){
 				    						flag = Flag.DEFENDING;
 				    						Operation rep = new Operation();
@@ -186,11 +252,11 @@ public class Division extends Agent{
 								            reply.setPerformative( ACLMessage.AGREE );
 								            reply.setContentObject(rep);
 								            send(reply);
-								            System.out.println(myAgent.getLocalName()+" agrees!");
+//								            System.out.println(myAgent.getLocalName()+" agrees!");
 				    					}
 				    					break;}
+			    					}
 			    				}
-			    				break;}
 		    			break;}
 		    			case (ACLMessage.REFUSE):{
 		    				if (content instanceof Operation){
@@ -207,8 +273,9 @@ public class Division extends Agent{
 		    					Operation opRec = (Operation) content;
 			    				switch (opRec.getType()){
 			    					case DEFEND:{
+			    						flag = Flag.ATTACKING;
 			    						Damage counterAttack = new Damage();
-			    						counterAttack.setDamageDealt(100);
+			    						counterAttack.setDamageDealt(Math.round(divisionInfo.getStrength()/20));
 				    					Operation rep = new Operation();
 					    				rep.setType(OperationType.ATTACK);
 					    				rep.setValue(counterAttack);
@@ -237,17 +304,18 @@ public class Division extends Agent{
 			    						System.out.println(myAgent.getLocalName()+"'s manpower is now: "+divisionInfo.getManpower());
 			    						if (divisionInfo.getManpower() > 0){
 			    							Damage counterAttack = new Damage();
-			    							counterAttack.setDamageDealt(100);
+			    							counterAttack.setDamageDealt(Math.round(divisionInfo.getStrength()/20*100)/100);
 				    						Operation rep = new Operation();
 					    					rep.setType(OperationType.DEFEND);
 					    					rep.setValue(counterAttack);
 						    				ACLMessage reply = msg.createReply();
 								            reply.setPerformative( ACLMessage.INFORM );
 								            reply.setContentObject(rep);
-								            send(reply);
+//								            send(reply);
+								            myAgent.addBehaviour(new WakeSender(reply, myAgent, divisionInfo.getSpeed()));
 			    						} else{
 			    							Damage counterAttack = new Damage();
-				    						counterAttack.setDamageDealt(100);
+				    						counterAttack.setDamageDealt(Math.round(divisionInfo.getStrength()/20*100)/100);
 					    					Operation rep = new Operation();
 						    				rep.setType(OperationType.KILLED);
 						    				rep.setValue(divisionInfo.getManpower());
@@ -262,21 +330,22 @@ public class Division extends Agent{
 			    						Damage damageReceived = (Damage) opRec.getValue();
 			    						divisionInfo.setManpower(divisionInfo.getManpower()-damageReceived.getDamageDealt());
 			    						System.out.println(msg.getSender().getLocalName() + " DEFENDEDed  from " + myAgent.getLocalName() + " for " + damageReceived.getDamageDealt());
-			    						System.out.println("My manpower is now: "+divisionInfo.getManpower());
+			    						System.out.println(getLocalName()+"'s manpower is now: "+divisionInfo.getManpower());
 				    					if (divisionInfo.getManpower() > 0){
 				    						Damage counterAttack = new Damage();
-				    						counterAttack.setDamageDealt(100);
+				    						counterAttack.setDamageDealt(Math.round(divisionInfo.getStrength()/20*100)/100);
 					    					Operation rep = new Operation();
 						    				rep.setType(OperationType.ATTACK);
 						    				rep.setValue(counterAttack);
 							    			ACLMessage reply = msg.createReply();
 									        reply.setPerformative( ACLMessage.INFORM );
 									        reply.setContentObject(rep);
-									        send(reply);
+//									        send(reply);
+									        myAgent.addBehaviour(new WakeSender(reply, myAgent, divisionInfo.getSpeed()));
 				    					} 
 				    					if (divisionInfo.getManpower() <= 0){
 				    						Damage counterAttack = new Damage();
-				    						counterAttack.setDamageDealt(100);
+				    						counterAttack.setDamageDealt(Math.round(divisionInfo.getStrength()/20*100)/100);
 					    					Operation rep = new Operation();
 						    				rep.setType(OperationType.KILLED);
 						    				rep.setValue(divisionInfo.getManpower());
@@ -288,20 +357,26 @@ public class Division extends Agent{
 				    					}
 				    					break;}
 			    					case KILLED:{
-			    						System.out.println("Setting flag: DEFAULT");
-			    						flag = Flag.DEFAULT;
+			    						flag = Flag.REGROUPING;
+			    						knownDivisions.remove(msg.getSender());
+			    						System.out.println(myAgent.getLocalName()+" setting flag: REGROUPING");
+			    						addBehaviour(new WakeFlagSet(Flag.DEFAULT, myAgent, divisionInfo.getSpeed()*2));
 			    						break;}
+			    					}
 			    				}
-			    				break;}
-		    				break;}
+		    			break;}
 	    			}
-    			} catch (UnreadableException | IOException e) {e.printStackTrace();}
+    			} catch (UnreadableException | IOException e) {}
     		}
     		else block();
     	}	
     }
 	
 	protected void takeDown() {
+		deregister();
+	}
+	
+	public void deregister(){
 		System.out.println("Deregistering "+getLocalName());
 		try {
 			DFService.deregister(this);
@@ -309,6 +384,23 @@ public class Division extends Agent{
 		catch (FIPAException fe) {
 			fe.printStackTrace();
 		}
+	}
+	
+	public void registerAgent(){
+		DFAgentDescription dfd = new DFAgentDescription();
+		dfd.setName(getAID());
+		ServiceDescription sdName  = new ServiceDescription();
+		ServiceDescription sdAllignment  = new ServiceDescription();
+		sdName.setType("division@"+location.getProvinceName());
+		sdAllignment.setType(divisionInfo.getAllignment().toString()+"@"+location.getProvinceName());
+		sdName.setName(getLocalName());
+		sdAllignment.setName(getLocalName());
+        System.out.println("Registering division@"+location.getProvinceName()+" ("+divisionInfo.getAllignment().toString()+") named "+getLocalName());
+        dfd.addServices(sdName);
+        dfd.addServices(sdAllignment);
+        try {
+			DFService.register(this,dfd);
+		} catch (FIPAException e) {e.printStackTrace();}
 	}
 	
 	//Pomocnicza do rejestracji agenta

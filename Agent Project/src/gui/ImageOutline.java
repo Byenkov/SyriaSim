@@ -1,4 +1,4 @@
-package map;
+package gui;
 
 import java.awt.*;
 import java.awt.geom.Area;

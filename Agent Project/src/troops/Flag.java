@@ -6,5 +6,6 @@ public enum Flag implements java.io.Serializable{
 	DEFENDING, 
 	HIDDEN, 
 	FORTIFIED, 
-	RETREATING; 
+	RETREATING,
+	REGROUPING; 
 }

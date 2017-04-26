@@ -32,6 +32,10 @@ public class DivisionInfo implements Serializable{
 		return (manpower*1)+(equipment*0.9)+(experience*0.9);
 	}
 	
+	public int getSpeed(){
+		return ((int) ((manpower*5)+(equipment*3)-experience*2)/5);
+	}
+	
 //	public double getInfluencedStrength(double enemyRecoSkill){
 //		double randomEvent = 0 + (double)(Math.random() * 0.3); //e.g. weather
 //		return getStrength()*(enemyRecoSkill+randomEvent);
