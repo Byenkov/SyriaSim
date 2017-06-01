@@ -7,16 +7,16 @@ public class Idlib implements Province{
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
 	private final String provinceName = "Idlib";
-	private HashMap<Province,Integer> neighbors = new HashMap<Province,Integer>();
+	private HashMap<String,Integer> neighbors = new HashMap<String,Integer>();
 	//private List<NazwaKlasyJednostek> unitsList = new ArrayList<Nazwa>();
-	   protected Idlib() {}
+	   protected Idlib() {setNeighbors();}
 	   public static Idlib getInstance() {
 	      if(instance == null) {
 	         instance = new Idlib();
 	      }
 	      return instance;
 	   }
-	   public HashMap<Province,Integer> getNeighbors()
+	   public HashMap<String, Integer> getNeighbors()
 		{
 			return neighbors;
 		}
@@ -27,9 +27,9 @@ public class Idlib implements Province{
 			return this.provinceName;
 		}
 		public void setNeighbors(){
-			neighbors.put(Latakia.getInstance(), 5);
-			neighbors.put(Hama.getInstance(), 5);
-			neighbors.put(Aleppo.getInstance(), 5);
+			neighbors.put("Latakia", 5);
+			neighbors.put("Hama", 5);
+			neighbors.put("Aleppo", 5);
 		}
 		public Province yourPosition(){
 			return this;

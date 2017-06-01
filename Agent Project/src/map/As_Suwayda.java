@@ -7,16 +7,16 @@ public class As_Suwayda implements Province{
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
 	private final String provinceName = "As_Suwayda";
-	private HashMap<Province,Integer> neighbors = new HashMap<Province,Integer>();
+	private HashMap<String,Integer> neighbors = new HashMap<String,Integer>();
 	//private List<NazwaKlasyJednostek> unitsList = new ArrayList<Nazwa>();
-	   protected As_Suwayda() {}
+	   protected As_Suwayda() {setNeighbors();}
 	   public static As_Suwayda getInstance() {
 	      if(instance == null) {
 	         instance = new As_Suwayda();
 	      }
 	      return instance;
 	   }
-	   public HashMap<Province,Integer> getNeighbors()
+	   public HashMap<String,Integer> getNeighbors()
 		{
 			return neighbors;
 		}
@@ -27,8 +27,8 @@ public class As_Suwayda implements Province{
 			return this.provinceName;
 		}
 		public void setNeighbors(){
-			neighbors.put(Rif_Dimashq.getInstance(), 5);
-			neighbors.put(Daraa.getInstance(), 5);	
+			neighbors.put("Rif_Dimashq", 5);
+			neighbors.put("Daraa", 5);	
 		}
 		public Province yourPosition(){
 			return this;

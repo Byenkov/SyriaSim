@@ -7,16 +7,16 @@ public class Deir_ez_Zor implements Province{
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
 	private final String provinceName = "Deir_ez_Zor";
-	private HashMap<Province,Integer> neighbors = new HashMap<Province,Integer>();
+	private HashMap<String, Integer> neighbors = new HashMap<String,Integer>();
 	//private List<NazwaKlasyJednostek> unitsList = new ArrayList<Nazwa>();
-	   protected Deir_ez_Zor() {}
+	   protected Deir_ez_Zor() {setNeighbors();}
 	   public static Deir_ez_Zor getInstance() {
 	      if(instance == null) {
 	         instance = new Deir_ez_Zor();
 	      }
 	      return instance;
 	   }
-	   public HashMap<Province,Integer> getNeighbors()
+	   public HashMap<String, Integer> getNeighbors()
 		{
 			return neighbors;
 		}
@@ -27,9 +27,9 @@ public class Deir_ez_Zor implements Province{
 			return this.provinceName;
 		}
 		public void setNeighbors(){
-			neighbors.put(Homs.getInstance(), 5);
-			neighbors.put(Ar_Raqqah.getInstance(), 5);
-			neighbors.put(Al_Hasakah.getInstance(), 5);
+			neighbors.put("Homs", 5);
+			neighbors.put("Ar_Raqqah", 5);
+			neighbors.put("Al_Hasakah", 5);
 		}
 		public Province yourPosition(){
 			return this;

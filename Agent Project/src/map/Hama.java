@@ -7,16 +7,16 @@ public class Hama implements Province{
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
 	private final String provinceName = "Hama";
-	private HashMap<Province,Integer> neighbors = new HashMap<Province,Integer>();
+	private HashMap<String,Integer> neighbors = new HashMap<String,Integer>();
 	//private List<NazwaKlasyJednostek> unitsList = new ArrayList<Nazwa>();
-	   protected Hama() {}
+	   protected Hama() {setNeighbors();}
 	   public static Hama getInstance() {
 	      if(instance == null) {
 	         instance = new Hama();
 	      }
 	      return instance;
 	   }
-	   public HashMap<Province,Integer> getNeighbors()
+	   public HashMap<String, Integer> getNeighbors()
 		{
 			return neighbors;
 		}
@@ -27,12 +27,12 @@ public class Hama implements Province{
 			return this.provinceName;
 		}
 		public void setNeighbors(){
-			neighbors.put(Latakia.getInstance(), 5);
-			neighbors.put(Tartus.getInstance(), 5);
-			neighbors.put(Homs.getInstance(), 5);
-			neighbors.put(Ar_Raqqah.getInstance(), 5);
-			neighbors.put(Aleppo.getInstance(), 5);
-			neighbors.put(Idlib.getInstance(), 5);	
+			neighbors.put("Latakia", 5);
+			neighbors.put("Tartus", 5);
+			neighbors.put("Homs", 5);
+			neighbors.put("Ar_Raqqah", 5);
+			neighbors.put("Aleppo", 5);
+			neighbors.put("Idlib", 5);	
 		}
 		public Province yourPosition(){
 			return this;

@@ -7,16 +7,16 @@ public class Ar_Raqqah implements Province{
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
 	private final String provinceName = "Ar_Raqqah";
-	private HashMap<Province,Integer> neighbors = new HashMap<Province,Integer>();
+	private HashMap<String,Integer> neighbors = new HashMap<String,Integer>();
 	//private List<NazwaKlasyJednostek> unitsList = new ArrayList<Nazwa>();
-	   protected Ar_Raqqah() {}
+	   protected Ar_Raqqah() {setNeighbors();}
 	   public static Ar_Raqqah getInstance() {
 	      if(instance == null) {
 	         instance = new Ar_Raqqah();
 	      }
 	      return instance;
 	   }
-	   public HashMap<Province,Integer> getNeighbors()
+	   public HashMap<String,Integer> getNeighbors()
 		{
 			return neighbors;
 		}
@@ -27,11 +27,11 @@ public class Ar_Raqqah implements Province{
 			return this.provinceName;
 		}
 		public void setNeighbors(){
-			neighbors.put(Homs.getInstance(), 5);
-			neighbors.put(Deir_ez_Zor.getInstance(), 5);
-			neighbors.put(Al_Hasakah.getInstance(), 5);
-			neighbors.put(Aleppo.getInstance(), 5);
-			neighbors.put(Hama.getInstance(), 5);
+			neighbors.put("Homs", 5);
+			neighbors.put("Deir_ez_Zor", 5);
+			neighbors.put("Al_Hasakah", 5);
+			neighbors.put("Aleppo", 5);
+			neighbors.put("Hama", 5);
 		}
 		public Province yourPosition(){
 			return this;

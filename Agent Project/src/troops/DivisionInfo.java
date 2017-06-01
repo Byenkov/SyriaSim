@@ -10,22 +10,17 @@ public class DivisionInfo implements Serializable{
 	private double manpower;
 	private double equipment;
 	private double experience;
-	private Allignment allignment;
 	
 	public DivisionInfo(){
 		this.manpower =	1000;
 		this.equipment = 1000;
 		this.experience = 1000;
-		this.allignment = Allignment.USA;
 	}
 	
 	public DivisionInfo(String manpower, String equipment, String experience, String allignment){
 		this.manpower =	Double.parseDouble(manpower);
 		this.equipment = Double.parseDouble(equipment);
 		this.experience = Double.parseDouble(experience);
-		if (allignment.equals("ASSAD")) this.allignment = Allignment.ASSAD;
-		if (allignment.equals("USA")) this.allignment = Allignment.USA;
-		if (allignment.equals("ISIS")) this.allignment = Allignment.ISIS;
 	}
 	
 	public double getStrength(){
@@ -59,16 +54,10 @@ public class DivisionInfo implements Serializable{
 	public void setExperience(double experience) {
 		this.experience = experience;
 	}
-	public Allignment getAllignment() {
-		return allignment;
-	}
-	public void setAllignment(Allignment allignment) {
-		this.allignment = allignment;
-	}
 	
 	@Override
 	public String toString(){
-		return " Manpower: " + manpower + " Equipment: " + equipment + " Experience: " + experience + " Allignment: " + allignment.toString(); 
+		return " Manpower: " + manpower + " Equipment: " + equipment + " Experience: " + experience; 
 	}
 	
 	

@@ -3,7 +3,7 @@ package troops;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Orders {
+public class Orders implements java.io.Serializable{
 	private Stance stance;
 	private List<Allignment> allies = new ArrayList<Allignment>();
 	private List<Allignment> neutrals = new ArrayList<Allignment>();
