@@ -4,6 +4,13 @@ import java.util.HashMap;
 import java.util.Set;
 
 public class Homs implements Province{
+	public int population = 1803000;
+	public int getPopulation() {
+		return population;
+	}
+	public void setPopulation(int population) {
+		this.population = population;
+	}
 	private static Homs instance = null;
 	private final int unitLimit = 5;
 	private int unitNumber = 0;

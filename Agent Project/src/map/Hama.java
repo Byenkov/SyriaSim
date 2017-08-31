@@ -3,6 +3,13 @@ package map;
 import java.util.HashMap;
 
 public class Hama implements Province{
+	public int population = 1628000;
+	public int getPopulation() {
+		return population;
+	}
+	public void setPopulation(int population) {
+		this.population = population;
+	}
 	private static Hama instance = null;
 	private final int unitLimit = 5;
 	private int unitNumber = 0;

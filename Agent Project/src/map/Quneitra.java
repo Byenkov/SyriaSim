@@ -3,6 +3,13 @@ package map;
 import java.util.HashMap;
 
 public class Quneitra implements Province{
+	public int population = 90000;
+	public int getPopulation() {
+		return population;
+	}
+	public void setPopulation(int population) {
+		this.population = population;
+	}
 	private static Quneitra instance = null;
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
