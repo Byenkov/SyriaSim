@@ -6,16 +6,9 @@ import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.io.File;
 import java.io.IOException;
-/**
- * CustomShape
- * based on a Class from Andrew Thompson * 
- * Source: http://stackoverflow.com/questions/7052422/image-graphic-into-a-shape-in-java/7059497#7059497
- * @author Samuel Schneider, Andrew Thompson
- * 
- *
- */
-class ImageOutline {
 
+class ImageOutline {
+	
     private BufferedImage image=null;
 
     public Area getArea_FastHack() {
@@ -68,7 +61,6 @@ class ImageOutline {
             BufferedImage image = ImageIO.read(new File(path));
             this.image = image;
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }

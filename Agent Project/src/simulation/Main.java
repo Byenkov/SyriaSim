@@ -12,38 +12,52 @@ public class Main {
 		rt.setCloseVM(true);
 		Profile profile = new ProfileImpl(null, 1200, null);
 		jade.wrapper.AgentContainer mainContainer = rt.createMainContainer(profile);
-//		ProfileImpl pContainer = new ProfileImpl(null, 1200, null);
-//		jade.wrapper.AgentContainer cont = rt.createAgentContainer(pContainer);
 		AgentController rma = mainContainer.createNewAgent("rma",
 		"jade.tools.rma.rma", new Object[0]);
 		
 		rma.start();
-//		createDivision(mainContainer, "l1", 800, 100, 100, "ISIS", "Latakia");
-//		createDivision(mainContainer, "l2", 885, 120, 150, "ISIS", "Latakia");
-//		createDivision(mainContainer, "l3", 450, 2700, 2000, "USA", "Latakia");
-//		createDivision(mainContainer, "l4", 4350, 200, 100, "ISIS", "Latakia");
-//		createDivision(mainContainer, "l5", 2350, 200, 100, "ISIS", "Latakia");
-//		createDivision(mainContainer, "l6", 1500, 800, 3000, "ASSAD", "Latakia");
-//		
-//		createDivision(mainContainer, "d1", 2000, 1000, 1000, "ISIS", "Dimashq");
-//		createDivision(mainContainer, "d2", 2950, 2200, 1500, "ASSAD", "Dimashq");
-//		createDivision(mainContainer, "d3", 750, 3700, 4000, "USA", "Dimashq");
-//		createDivision(mainContainer, "d4", 2350, 200, 100, "ISIS", "Dimashq");
-//		createDivision(mainContainer, "d5", 1350, 200, 100, "ISIS", "Dimashq");
-//		createDivision(mainContainer, "d6", 2000, 800, 3000, "ASSAD", "Dimashq");
-		
+		mainContainer.createNewAgent("ASSAD", "troops.Leadership", new String[]{"ASSAD", "1000", "1000"}).start();
+		mainContainer.createNewAgent("USA", "troops.Leadership", new String[]{"USA", "1000", "1000"}).start();
+		mainContainer.createNewAgent("ISIS", "troops.Leadership", new String[]{"ISIS", "1000", "1000"}).start();
 
-		
-		createDivision(mainContainer, "d1", "Dimashq", "USA");
-		createDivision(mainContainer, "d2", "Dimashq", "ASSAD");
-		createDivision(mainContainer, "d3", "Dimashq", "ISIS");
-		
 		mainContainer.createNewAgent("Dimashq", "provinces.ProvinceAgent", new String[]{"Dimashq"}).start();
+		
+		createDivision(mainContainer, "us1dim", "Dimashq", "USA", "25", "83", "0");
+		createDivision(mainContainer, "us2dim", "Dimashq", "USA", "25", "83", "0");
+		createDivision(mainContainer, "as1dim", "Dimashq", "ASSAD", "40", "90", "0");
+		createDivision(mainContainer, "is1dim", "Dimashq", "ISIS", "90", "39", "0");
+		createDivision(mainContainer, "is10dim", "Dimashq", "ISIS", "90", "39", "0");
+		createDivision(mainContainer, "is3dim", "Dimashq", "ISIS", "50", "30", "50");
+		createDivision(mainContainer, "as2dim", "Dimashq", "ASSAD", "15", "20", "50");
+		createDivision(mainContainer, "us3dim", "Dimashq", "USA", "38", "73", "0");
+		
+		mainContainer.createNewAgent("Aleppo", "provinces.ProvinceAgent", new String[]{"Aleppo"}).start();
+		
+		createDivision(mainContainer, "us1ale", "Aleppo", "USA", "25", "83", "0");
+		createDivision(mainContainer, "us2ale", "Aleppo", "USA", "25", "83", "0");
+		createDivision(mainContainer, "as1ale", "Aleppo", "ASSAD", "40", "90", "0");
+		createDivision(mainContainer, "is1ale", "Aleppo", "ISIS", "90", "39", "0");
+		createDivision(mainContainer, "is2ale", "Aleppo", "ISIS", "30", "2", "0");
+		createDivision(mainContainer, "as3ale", "Aleppo", "ASSAD", "50", "30", "0");
+		createDivision(mainContainer, "is4ale", "Aleppo", "ISIS", "15", "20", "0");
+		createDivision(mainContainer, "is5ale", "Aleppo", "ISIS", "38", "73", "0");
+		
+		mainContainer.createNewAgent("Tartus", "provinces.ProvinceAgent", new String[]{"Tartus"}).start();
+		
+		createDivision(mainContainer, "us1tar", "Tartus", "USA", "25", "83", "0");
+		createDivision(mainContainer, "us2tar", "Tartus", "USA", "25", "83", "0");
+		createDivision(mainContainer, "as1tar", "Tartus", "ASSAD", "40", "90", "0");
+		createDivision(mainContainer, "is1tar", "Tartus", "ISIS", "90", "39", "0");
+		createDivision(mainContainer, "is2tar", "Tartus", "ISIS", "30", "2", "0");
+		createDivision(mainContainer, "is3tar", "Tartus", "ISIS", "50", "30", "50");
+		createDivision(mainContainer, "is4tar", "Tartus", "ISIS", "15", "20", "50");
+		createDivision(mainContainer, "is5tar", "Tartus", "ISIS", "38", "173", "0");
+		
 	}
 	
-	public static void createDivision(jade.wrapper.AgentContainer cont, String name, String province, String allignment) throws StaleProxyException{
-		cont.createNewAgent(name+"MilUnit","troops.MilUnit", new String[]{province, allignment}).start();
-		cont.createNewAgent(name+"RecoUnit","troops.RecoUnit", new String[]{province, allignment}).start();
+	public static void createDivision(jade.wrapper.AgentContainer cont, String name, String province, String allignment, String manpower, String equipmnent, String experience) throws StaleProxyException{
 		cont.createNewAgent(name,"troops.MainUnit", new String[]{province, allignment}).start();
+		cont.createNewAgent(name+"MilUnit","troops.MilUnit", new String[]{province, allignment, manpower, equipmnent, experience}).start();
+		cont.createNewAgent(name+"RecoUnit","troops.RecoUnit", new String[]{province, allignment}).start();	
 	}
 }

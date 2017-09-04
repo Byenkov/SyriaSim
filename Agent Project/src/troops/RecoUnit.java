@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import jade.core.AID;
 import jade.core.Agent;
@@ -30,16 +31,19 @@ import jade.lang.acl.UnreadableException;
 import jade.wrapper.AgentContainer;
 import map.Province;
 import map.ProvinceFactory;
+import provinces.LocalAgents;
 
 public class RecoUnit extends Agent {
 	private AID myCommand;
+	private AID province;
 	private List<AID> infiltratingAgents; //agents that are infiltrating this
 	private List<AID> knownAgents; //known agents this agent sends infiltrators to
-	private List<Allignment> enemies;
-	private List<Allignment> neutrals; 
-	private List<Allignment> allies;
-	private List<KnownUnit> knownRecoUnits;
-	private List<KnownUnit> knownMilUnits;
+	private List<KnownUnit> allies;
+	private List<KnownUnit> neutrals;
+	private List<KnownUnit> enemies;
+	private Orders orders;
+	private Map<AID, KnownRecoUnit> knownRecoUnits;
+	private Map<AID, DivisionInfo> knownMilUnits;
 	private Province location;
 	private Allignment allignment;
 	
@@ -53,26 +57,45 @@ public class RecoUnit extends Agent {
 		knownAgents = new ArrayList<AID>();
 		infiltratingAgents = new ArrayList<AID>();
 		
+		knownRecoUnits = new HashMap<AID, KnownRecoUnit>();
+		knownMilUnits = new HashMap<AID, DivisionInfo>();
+		
 		location = ProvinceFactory.getProvince((String) args[0]);
+		
 		DFAgentDescription dfd = new DFAgentDescription();
 		dfd.setName(getAID());
 		ServiceDescription sd  = new ServiceDescription();
-		sd.setType("RecoUnit@"+location.getProvinceName());
+		sd.setType("RecoUnit");
 		sd.setName(getLocalName());
 		sd.setOwnership(allignment.toString());
         dfd.addServices(sd);
-        System.out.println(getAID());
         try {
 			DFService.register(this,dfd);
 		} catch (FIPAException e) {e.printStackTrace();}
         
+
+		DFAgentDescription[] result; 
+		DFAgentDescription templateProv = new DFAgentDescription();
+		ServiceDescription sdProv = new ServiceDescription();
+		sdProv.setType("Province");
+		sdProv.setName(location.getProvinceName());
+		templateProv.addServices(sdProv);
+		try {
+			result = DFService.search(this, templateProv);
+			province = result[0].getName();
+		} catch (FIPAException e) {
+			e.printStackTrace();
+		}
+        
         addBehaviour(new Activator());
 		addBehaviour(new InfiltratorChecker());
-        addBehaviour(new WakerBehaviour(this, 1000) {
+		addBehaviour(new InfiltrationInfoUpdater());
+        addBehaviour(new WakerBehaviour(this, 500) {
         	public void onWake(){
         		myAgent.addBehaviour(new InitialAgentFinder());
         	}
 		});
+        addBehaviour(new OrderHandler());
         
         AMSSubscriber myAMSSubscriber = new AMSSubscriber() {
         	protected void installHandlers(Map handlers) {
@@ -88,23 +111,41 @@ public class RecoUnit extends Agent {
 		        	public void handle(Event ev) {
 		        		DeadAgent da = (DeadAgent) ev;
 		        		knownAgents.remove(da.getAgent());
-		        		System.out.println(getLocalName()+" knows: "+knownAgents);
-		        		System.out.println(getLocalName()+" removing "+da.getAgent().getLocalName()+" from local knowledge");
-		        		System.out.println(getLocalName()+" knows: "+knownAgents);
+		        		for (int i = 0; i < knownMilUnits.keySet().toArray().length; i++){
+		        			knownMilUnits.remove(da.getAgent());
+		        			knownAgents.remove(da.getAgent());
+		        			knownRecoUnits.remove(da.getAgent());
+		        		}
 		        	}
 	        	};
 	        	handlers.put(IntrospectionVocabulary.DEADAGENT, terminationsHandler);
         	}
         };
         addBehaviour(myAMSSubscriber);
+        addBehaviour(new AgentKill());
 	}
 	
-	/*
-	 * Initial Reco Behaviour
-	 * 1. Requests orders from Main
-	 * 2. Receives orders
-	 * 3. Gets ordered AIDs for further investigation
-	 */
+	protected class OrderHandler extends CyclicBehaviour {
+
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Target"), MessageTemplate.MatchPerformative(ACLMessage.CFP));		
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				ACLMessage reply = msg.createReply();
+				reply.setPerformative(ACLMessage.AGREE);
+				try {
+					reply.setContentObject(knownMilUnits.values().toArray());
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				send(reply);
+			}
+			else block();
+		}
+		
+	}
+	
 	protected class InitialAgentFinder extends SequentialBehaviour{
 		private List<AID> searchedMilAgents;
 		private List<AID> searchedRecoAgents;
@@ -135,9 +176,7 @@ public class RecoUnit extends Agent {
 						Orders receivedOrders;
 						try {
 							receivedOrders = (Orders) msg.getContentObject();
-							enemies = receivedOrders.getEnemies();
-							neutrals = receivedOrders.getNeutrals();
-							allies = receivedOrders.getAllies();
+							orders = receivedOrders;
 						} catch (UnreadableException e) {e.printStackTrace();}
 						finished = true;
 					}
@@ -149,26 +188,47 @@ public class RecoUnit extends Agent {
 					return finished;
 				}
 			});
+			
+			//Request AIDs from Province
 			addSubBehaviour(new OneShotBehaviour() {
-				//get AIDs
 				@Override
 				public void action() {
-					for (Allignment allignment : neutrals){
-						searchedMilAgents.addAll(searchAID(myAgent, "MilUnit", allignment));
-						searchedRecoAgents.addAll(searchAID(myAgent, "RecoUnit", allignment));
-						System.out.println(myCommand.getLocalName());
-
-					}
-					for (Allignment allignment : enemies){
-						searchedMilAgents.addAll(searchAID(myAgent, "MilUnit", allignment));
-						searchedRecoAgents.addAll(searchAID(myAgent, "RecoUnit", allignment));
-					}
-					knownAgents.addAll(searchedRecoAgents);
-					knownAgents.addAll(searchedMilAgents);
+					//TODO check if orders are up to date
+					ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
+					msg.setConversationId("Reco");
+					msg.addReceiver(province);
+					send(msg);
 				}
 			});
+			//get local agents
+			addSubBehaviour(new Behaviour() {
+				boolean finished = false;
+				@SuppressWarnings("unchecked")
+				@Override
+				public void action() {
+					MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Reco"), MessageTemplate.MatchPerformative(ACLMessage.INFORM_REF));		
+					ACLMessage msg= receive(mt);
+					if (msg != null){
+						try {
+							knownAgents = (ArrayList<AID>) msg.getContentObject();
+						} catch (UnreadableException e) {e.printStackTrace();}
+						finished = true;
+					}
+					else block();
+				}
+
+				@Override
+				public boolean done() {
+					return finished;
+				}
+			});
+			
 			addSubBehaviour(new Infiltrate());
-			//TODO start searching new agents
+		}
+		
+		//true - agent is not mine
+		protected boolean checkID(AID aid){
+			return !(aid.getLocalName().charAt(0) == allignment.toString().charAt(0));
 		}
 	}
 	
@@ -209,6 +269,30 @@ public class RecoUnit extends Agent {
 		
 	}
 	
+	private class InfiltrationInfoUpdater extends CyclicBehaviour{
+		MessageTemplate mt;
+		@Override
+		public void action() {
+			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Infiltration"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				try {
+					Object content = msg.getContentObject();
+					if (content instanceof KnownRecoUnit){
+						KnownRecoUnit addedReco = (KnownRecoUnit) content;
+						knownRecoUnits.put(msg.getSender(), addedReco);
+					}
+					if (content instanceof DivisionInfo){
+						DivisionInfo addedMil = (DivisionInfo) content;
+						knownMilUnits.put(msg.getSender(), addedMil);
+					}
+				} catch (UnreadableException e) {e.printStackTrace();}
+			}
+			else block();
+		}
+		
+	}
+	
 	private class InfiltratingAgent extends TickerBehaviour{
 		private AID aid;
 		
@@ -220,9 +304,23 @@ public class RecoUnit extends Agent {
 		@Override
 		protected void onTick() {
 			//TODO check efficiency
-			//TODO extract info
+			float efficiency = 1f; //TODO add weather and skill conditions
+			//TODO randomize  bit
+			KnownRecoUnit thisReco = new KnownRecoUnit();
+			thisReco.setAid(myAgent.getAID());
+			thisReco.setAllies(allies);
+			thisReco.setEnemies(enemies);
+			thisReco.setNeutrals(neutrals);
+			thisReco.setAllignment(allignment);
+			thisReco.setOrders(orders);
 			//TODO send back info
-			System.out.println(aid.getLocalName() + " infiltrating " + myAgent.getAID().getLocalName());
+			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+			msg.setConversationId("Infiltration");
+			msg.addReceiver(aid);
+			try {
+				msg.setContentObject(thisReco);
+			} catch (IOException e) {e.printStackTrace();}
+			send(msg);
 		}
 		
 	}
@@ -246,34 +344,43 @@ public class RecoUnit extends Agent {
 		return returned;
 	}
 	
-	private class Activator extends Behaviour{
+	private class Activator extends CyclicBehaviour{
 		MessageTemplate mt;
-		boolean done = false;
 		@Override
 		public void action() {
 			mt = MessageTemplate.MatchConversationId("ActivateUnit");
 			ACLMessage msg= receive(mt);
 			if (msg != null){
-				myCommand = msg.getSender();
-				try {
-					allignment = (Allignment) msg.getContentObject(); //TODO nie trzeba pobierac allignmenta
-				} catch (UnreadableException e){e.printStackTrace();}
-		        done = true;
+				myCommand =msg.getSender();
+				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
+				msg1.setConversationId("ActivateUnit");
+				msg1.addReceiver(province);
+				msg1.setContent("Reco");
+				send(msg1);
 			}
 			else block();
-		}
-		@Override
-		public boolean done() {
-			return done;
 		}	
+	}
+	
+	private class AgentKill extends CyclicBehaviour {
+
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("KillMSG"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg = receive(mt);
+			if (msg != null){
+				doDelete();
+			} else block();
+			
+		}
 	}
 	
 	protected void takeDown() {
 		deregister();
 	}
+
 	
 	public void deregister(){
-		System.out.println("Deregistering "+getLocalName());
 		try {
 			DFService.deregister(this);
 			}

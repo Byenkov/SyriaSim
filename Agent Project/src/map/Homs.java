@@ -4,13 +4,8 @@ import java.util.HashMap;
 import java.util.Set;
 
 public class Homs implements Province{
-	public int population = 1803000;
-	public int getPopulation() {
-		return population;
-	}
-	public void setPopulation(int population) {
-		this.population = population;
-	}
+	public final Importance importance = Importance.CRUCIAL;
+	private int population = 1803000;
 	private static Homs instance = null;
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
@@ -43,5 +38,11 @@ public class Homs implements Province{
 		}
 		public Province yourPosition(){
 			return this;
+		}
+		public int getPopulation() {
+			return population;
+		}
+		public void setPopulation(int population) {
+			this.population = population;
 		}
 	}

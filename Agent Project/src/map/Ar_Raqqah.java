@@ -3,13 +3,8 @@ package map;
 import java.util.HashMap;
 
 public class Ar_Raqqah implements Province{
-	public int population = 944000;
-	public int getPopulation() {
-		return population;
-	}
-	public void setPopulation(int population) {
-		this.population = population;
-	}
+	public final Importance importance = Importance.CRUCIAL;
+	private int population = 944000;
 	private static Ar_Raqqah instance = null;
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
@@ -42,5 +37,11 @@ public class Ar_Raqqah implements Province{
 		}
 		public Province yourPosition(){
 			return this;
+		}
+		public int getPopulation() {
+			return population;
+		}
+		public void setPopulation(int population) {
+			this.population = population;
 		}
 	}

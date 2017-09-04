@@ -30,7 +30,7 @@ public class Orders implements java.io.Serializable{
 	}
 	
 	public void setDefaultASSAD(){
-		stance = Stance.OFFENSIVE;
+		stance = Stance.MODERATE;
 		addNeutral(Allignment.USA);
 		addEnemy(Allignment.ISIS);
 	}
