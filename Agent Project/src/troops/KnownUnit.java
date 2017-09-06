@@ -6,7 +6,6 @@ import java.util.List;
 import jade.core.AID;
 
 public class KnownUnit {
-	private AID aid;
 	private DivisionInfo divisionInfo;
 	private List<KnownUnit> allies;
 	private List<KnownUnit> neutrals;
@@ -18,12 +17,6 @@ public class KnownUnit {
 		enemies = new ArrayList<KnownUnit>();
 	}
 	
-	public AID getAid() {
-		return aid;
-	}
-	public void setAid(AID aid) {
-		this.aid = aid;
-	}
 	public DivisionInfo getDivisionInfo() {
 		return divisionInfo;
 	}
@@ -65,10 +58,6 @@ public class KnownUnit {
 	}
 	public void removeNeutral(KnownUnit neutral){
 		neutrals.remove(neutral);
-	}
-	
-	public boolean equals(KnownUnit unit){
-		return this.aid==unit.getAid();
 	}
 
 }
