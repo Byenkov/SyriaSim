@@ -1,6 +1,6 @@
 package troops;
 
-import jade.util.leap.Serializable;
+import java.io.Serializable;
 
 public class StatusReport implements Serializable{
 	private int allied;

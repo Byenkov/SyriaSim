@@ -2,7 +2,13 @@ package map;
 
 import java.util.HashMap;
 
+import troops.Allignment;
+
 public class Aleppo implements Province{
+	private Allignment controller; 
+	private double usaStrength;
+	private double assadStrength;
+	private double isisStrength;
 	public final Importance importance = Importance.CRITICAL;
 	private int population = 4868000;
 	private static Aleppo instance = null;
@@ -41,5 +47,38 @@ public class Aleppo implements Province{
 		}
 		public void setPopulation(int population) {
 			this.population = population;
+		}
+		public Importance getImportance() {
+			return importance;
+		}
+		public double getStrength(String allignment) {
+			switch (allignment){
+			case "ASSAD":
+				return assadStrength;
+			case "USA":
+				return usaStrength;
+			case "ISIS":
+				return isisStrength;
+			}
+			return 0.0;
+		}
+		public void setStrength(String allignment, double strength) {
+			switch (allignment){
+			case "ASSAD":
+				assadStrength = strength;
+				break;
+			case "USA":
+				usaStrength = strength;
+				break;
+			case "ISIS":
+				isisStrength = strength;
+				break;
+			}
+		}
+		public Allignment getController() {
+			return controller;
+		}
+		public void setController(Allignment controller) {
+			this.controller = controller;
 		}
 	}

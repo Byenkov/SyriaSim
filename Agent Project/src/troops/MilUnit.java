@@ -56,32 +56,11 @@ public class MilUnit extends Agent{
 		divisionInfo.setAllignment(allignment);
 		
 		location = ProvinceFactory.getProvince((String) args[0]);
-		
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd  = new ServiceDescription();
-		sd.setType("MilUnit");
-		sd.setName(getLocalName());
-		sd.setOwnership(allignment.toString());
-        dfd.addServices(sd);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
         
-        DFAgentDescription provinceTemp = new DFAgentDescription();
-		ServiceDescription provinceSd = new ServiceDescription();
-		provinceSd.setType("Province");
-		provinceSd.setName(location.getProvinceName());
-		provinceTemp.addServices(provinceSd);
-		DFAgentDescription[] result; 
-		try {
-			result = DFService.search(this, provinceTemp);
-			myProvince = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
+       	myProvince = new AID( location.getProvinceName(), AID.ISLOCALNAME);
         
         addBehaviour(new Activator());
+        addBehaviour(new Deactivator());
         addBehaviour(new DefenseBehaviour());
         addBehaviour(new AttackOrderReceiver());
         addBehaviour(new InfiltratorChecker());
@@ -105,12 +84,33 @@ public class MilUnit extends Agent{
 			mt = MessageTemplate.MatchConversationId("ActivateUnit");
 			ACLMessage msg= receive(mt);
 			if (msg != null){
+				String newLocation = msg.getContent();
+				myProvince = new AID( newLocation, AID.ISLOCALNAME);
+				location = ProvinceFactory.getProvince(newLocation);
 				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
 				msg1.setConversationId("ActivateUnit");
 				msg1.addReceiver(myProvince);
 				msg1.setContent("Mil");
 				send(msg1);
 				myCommand = msg.getSender();
+			}
+			else block();
+		}
+	}
+	
+	private class Deactivator extends CyclicBehaviour{
+		MessageTemplate mt;
+		
+		@Override
+		public void action() {
+			mt = MessageTemplate.MatchConversationId("DeactivateUnit");
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
+				msg1.setConversationId("DeactivateUnit");
+				msg1.addReceiver(myProvince);
+				msg1.setContent("Mil");
+				send(msg1);
 			}
 			else block();
 		}
@@ -494,11 +494,5 @@ public class MilUnit extends Agent{
 	}
 	
 	public void deregister(){
-		try {
-			DFService.deregister(this);
-			}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
 	}
 }

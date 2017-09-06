@@ -24,13 +24,13 @@ public class Orders implements java.io.Serializable{
 	}
 	
 	public void setDefaultUSA(){
-		stance = Stance.MODERATE;
+		stance = Stance.OFFENSIVE;
 		addNeutral(Allignment.ASSAD);
 		addEnemy(Allignment.ISIS);
 	}
 	
 	public void setDefaultASSAD(){
-		stance = Stance.MODERATE;
+		stance = Stance.OFFENSIVE;
 		addNeutral(Allignment.USA);
 		addEnemy(Allignment.ISIS);
 	}

@@ -62,32 +62,10 @@ public class RecoUnit extends Agent {
 		
 		location = ProvinceFactory.getProvince((String) args[0]);
 		
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd  = new ServiceDescription();
-		sd.setType("RecoUnit");
-		sd.setName(getLocalName());
-		sd.setOwnership(allignment.toString());
-        dfd.addServices(sd);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
-        
-
-		DFAgentDescription[] result; 
-		DFAgentDescription templateProv = new DFAgentDescription();
-		ServiceDescription sdProv = new ServiceDescription();
-		sdProv.setType("Province");
-		sdProv.setName(location.getProvinceName());
-		templateProv.addServices(sdProv);
-		try {
-			result = DFService.search(this, templateProv);
-			province = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
+		province = new AID( location.getProvinceName(), AID.ISLOCALNAME);
         
         addBehaviour(new Activator());
+        addBehaviour(new Deactivator());
 		addBehaviour(new InfiltratorChecker());
 		addBehaviour(new InfiltrationInfoUpdater());
         addBehaviour(new WakerBehaviour(this, 500) {
@@ -325,41 +303,44 @@ public class RecoUnit extends Agent {
 		
 	}
 	
-	
-	public ArrayList<AID> searchAID(Agent agent, String type, Allignment ownership){
-		ArrayList<AID> returned = new ArrayList<AID>();
-		DFAgentDescription template = new DFAgentDescription();
-		ServiceDescription sd = new ServiceDescription();
-		sd.setType(type+"@"+location.getProvinceName());
-		sd.setOwnership(ownership.toString());
-		template.addServices(sd);
-		try {
-			List<DFAgentDescription> dfList = (Arrays.asList(DFService.search(agent, template)));
-			for (DFAgentDescription df : dfList){
-				returned.add(df.getName());
-			}
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
-		return returned;
-	}
-	
 	private class Activator extends CyclicBehaviour{
 		MessageTemplate mt;
+		
 		@Override
 		public void action() {
 			mt = MessageTemplate.MatchConversationId("ActivateUnit");
 			ACLMessage msg= receive(mt);
 			if (msg != null){
-				myCommand =msg.getSender();
+				String newLocation = msg.getContent();
+				province = new AID( newLocation, AID.ISLOCALNAME);
+				location = ProvinceFactory.getProvince(newLocation);
 				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
 				msg1.setConversationId("ActivateUnit");
 				msg1.addReceiver(province);
 				msg1.setContent("Reco");
 				send(msg1);
+				myCommand = msg.getSender();
 			}
 			else block();
-		}	
+		}
+	}
+	
+	private class Deactivator extends CyclicBehaviour{
+		MessageTemplate mt;
+		
+		@Override
+		public void action() {
+			mt = MessageTemplate.MatchConversationId("DeactivateUnit");
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
+				msg1.setConversationId("DeactivateUnit");
+				msg1.addReceiver(province);
+				msg1.setContent("Reco");
+				send(msg1);
+			}
+			else block();
+		}
 	}
 	
 	private class AgentKill extends CyclicBehaviour {
@@ -381,11 +362,5 @@ public class RecoUnit extends Agent {
 
 	
 	public void deregister(){
-		try {
-			DFService.deregister(this);
-			}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
 	}
 }

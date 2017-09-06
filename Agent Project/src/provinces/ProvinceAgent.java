@@ -2,25 +2,17 @@ package provinces;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
 import java.util.Random;
 
 import jade.core.AID;
 import jade.core.Agent;
-import jade.core.Location;
 import jade.core.behaviours.CyclicBehaviour;
-import jade.core.behaviours.ParallelBehaviour;
-import jade.core.behaviours.TickerBehaviour;
 import jade.core.behaviours.WakerBehaviour;
-import jade.domain.DFService;
-import jade.domain.FIPAException;
-import jade.domain.FIPAAgentManagement.DFAgentDescription;
-import jade.domain.FIPAAgentManagement.ServiceDescription;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
 import jade.lang.acl.UnreadableException;
 import map.*;
+import troops.Allignment;
 import troops.Battle;
 import troops.DivisionInfo;
 
@@ -29,25 +21,25 @@ public class ProvinceAgent extends Agent {
 	private ArrayList<AID> localAgents;
 	private Weather weather;
 	private int weatherTime;
+	private Allignment controller; 
+	private double usaStrength;
+	private double assadStrength;
+	private double isisStrength;
 	
 	protected void setup(){
 		Object[] args = getArguments();
 		localAgents = new ArrayList<AID>();
+		
+		usaStrength = 0;
+		assadStrength = 0;
+		isisStrength = 0;
+		
 		properties = ProvinceFactory.getProvince((String) args[0]);
-
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sdName  = new ServiceDescription();
-		sdName.setType("Province");
-		sdName.setName(properties.getProvinceName());
-        dfd.addServices(sdName);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
         
         addBehaviour(new AddUnit());
         addBehaviour(new RemoveUnit());
         addBehaviour(new SendAIDs());
+        addBehaviour(new StatusUpdate());
         addBehaviour(new ProvinceWeather(this, 0));
         addBehaviour(new BattleSim());
         addBehaviour(new TerrorReceiver());
@@ -72,11 +64,48 @@ public class ProvinceAgent extends Agent {
 		}
 	}
 	
+	private class StatusUpdate extends CyclicBehaviour{
+		MessageTemplate mt;
+		@Override
+		public void action() {
+			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Status"),MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				try {
+					Double status = (Double) msg.getContentObject();
+					String allignment = msg.getEncoding();
+					if (allignment.equals("ASSAD")){
+						assadStrength = status;
+						properties.setStrength("ASSAD", assadStrength);
+						System.out.println("ASSAD adding " + assadStrength);
+					}
+					if (allignment.equals("USA")){
+						usaStrength = status;
+						properties.setStrength("USA", usaStrength);
+						System.out.println("USA adding " + usaStrength);
+					}
+					if (allignment.equals("ISIS")){
+						isisStrength = status;
+						properties.setStrength("ISIS", isisStrength);
+						System.out.println("ISIS adding " + isisStrength);
+					}
+					if (assadStrength > usaStrength && assadStrength > isisStrength) controller = Allignment.ASSAD;
+					if (usaStrength > assadStrength && usaStrength > isisStrength) controller = Allignment.USA;
+					if (isisStrength > usaStrength && isisStrength > assadStrength) controller = Allignment.ISIS;
+					properties.setController(controller);
+				} catch (UnreadableException e) {
+					e.printStackTrace();
+				}
+			}
+			else block();
+		}	
+	}
+	
 	private class AddUnit extends CyclicBehaviour{
 		MessageTemplate mt;
 		@Override
 		public void action() {
-			mt = MessageTemplate.MatchConversationId("ActivateUnit");
+			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("ActivateUnit"),MessageTemplate.MatchPerformative(ACLMessage.INFORM));
 			ACLMessage msg= receive(mt);
 			if (msg != null){
 				localAgents.add(msg.getSender());
@@ -89,11 +118,10 @@ public class ProvinceAgent extends Agent {
 		MessageTemplate mt;
 		@Override
 		public void action() {
-			mt = MessageTemplate.MatchConversationId("DeactivateUnit");
+			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("DeactivateUnit"),MessageTemplate.MatchPerformative(ACLMessage.INFORM));
 			ACLMessage msg= receive(mt);
 			if (msg != null){
 				localAgents.remove(msg.getSender());
-				System.out.println("Removing "+msg.getSender().getLocalName());
 			}
 			else block();
 		}	

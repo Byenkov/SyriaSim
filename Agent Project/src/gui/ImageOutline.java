@@ -7,9 +7,9 @@ import javax.imageio.ImageIO;
 import java.io.File;
 import java.io.IOException;
 
-class ImageOutline {
+public class ImageOutline {
 	
-    private BufferedImage image=null;
+    public BufferedImage image=null;
 
     public Area getArea_FastHack() {
         //Assumes Black as Shape Color

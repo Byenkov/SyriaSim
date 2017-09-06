@@ -1,12 +1,14 @@
 package troops;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
+import jade.core.behaviours.OneShotBehaviour;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
@@ -21,7 +23,8 @@ public class Leadership extends Agent {
 	private Allignment allignment;
 	private double manpower;
 	private double equipment;
-	private Map<String, Situation> globalSituation;
+	private HashMap<String, Situation> globalSituation;
+	private HashMap<AID, Integer> agentCalls;
 	private ArrayList<Province> provinces;
 	
 	protected void setup(){
@@ -37,19 +40,30 @@ public class Leadership extends Agent {
 		manpower = Double.parseDouble((String) args[1]);
 		equipment = Double.parseDouble((String) args[2]);
 		globalSituation = new HashMap<String, Leadership.Situation>();
-		
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd  = new ServiceDescription();
-		sd.setType("Leadership");
-		sd.setName(allignmentString);
-        dfd.addServices(sd);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
+		agentCalls = new HashMap<AID, Integer>();
         
         addBehaviour(new StatusUpdateReceiver());
         addBehaviour(new CallForHelpReceiver());
+	}
+	
+	protected class DecisionMaker extends OneShotBehaviour {
+
+		@Override
+		public void action() {
+			ArrayList<String> critical = new ArrayList<String>();
+			ArrayList<String> crucial = new ArrayList<String>();
+			ArrayList<String> important = new ArrayList<String>();
+			ArrayList<String> secondary = new ArrayList<String>();
+			for (Province province : provinces) {
+				if (province.getImportance() == Importance.CRITICAL) critical.add(province.getProvinceName());
+				if (province.getImportance() == Importance.CRUCIAL) crucial.add(province.getProvinceName());
+				if (province.getImportance() == Importance.IMPORTANT) important.add(province.getProvinceName());
+				if (province.getImportance() == Importance.SECONDARY) secondary.add(province.getProvinceName());
+			}
+			
+			
+		}
+		
 	}
 	
 	protected class StatusUpdateReceiver extends CyclicBehaviour {
@@ -67,6 +81,22 @@ public class Leadership extends Agent {
 					localSituation.setNeutrals(report.getNeutral());
 					localSituation.setEnemies(report.getEnemy());
 					localSituation.addTroops(msg.getSender());
+					switch (report.getSituation()) {
+					case 1:
+						break;
+					case 2:
+						break;
+					case 3:
+						break;
+					case 4:
+						break;
+					}
+					int severity;
+//					addBehaviour(new ChangeDivisionLocation(msg.getSender(), "Aleppo"));
+					if (globalSituation.containsKey(report.getLocation())) {
+						severity = globalSituation.get(report.getLocation()).getSeverity();
+						localSituation.setSeverity(severity);
+					}
 					globalSituation.put(report.getLocation(), localSituation);
 				} catch (UnreadableException e) { e.printStackTrace(); }
 			}else block();
@@ -81,10 +111,38 @@ public class Leadership extends Agent {
 			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("CallForHelp"), MessageTemplate.MatchPerformative(ACLMessage.REQUEST));
 			ACLMessage msg = receive(mt);
 			if (msg != null) {
-				double severity = Double.parseDouble(msg.getContent());
+				try {
+					CallForHelp cfh = (CallForHelp) msg.getContentObject();
+					Situation current = globalSituation.get(cfh.getLocation());
+					int old = current.getSeverity();
+					current.addSeverity(cfh.getSeverity());
+					globalSituation.put(cfh.getLocation(), current);
+//					if (allignment == Allignment.ASSAD) System.out.println(cfh.getLocation() + ": " + old + " + " + cfh.getSeverity() + " = " + globalSituation.get(cfh.getLocation()).getSeverity());
+				} catch (UnreadableException e) {
+					e.printStackTrace();
+				}
 			} else block();
 		}
 		
+	}
+	
+	protected class ChangeDivisionLocation extends OneShotBehaviour {
+		private AID division;
+		private String targetProvince;
+		
+		public ChangeDivisionLocation(AID division, String targetProvince){
+			this.division = division;
+			this.targetProvince = targetProvince;
+		}
+
+		@Override
+		public void action() {
+			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+			msg.addReceiver(division);
+			msg.setContent(targetProvince);
+			msg.setConversationId("ChangeLocation");
+			send(msg);			
+		}		
 	}
 	
 	protected void getMapStatus(){
@@ -103,24 +161,21 @@ public class Leadership extends Agent {
 		provinces.add(Quneitra.getInstance());
 		provinces.add(Rif_Dimashq.getInstance());
 		provinces.add(Tartus.getInstance());
+		Collections.sort(provinces, (a, b) -> a.getImportance().getValue() > b.getImportance().getValue() ? -1 : a.getImportance() == b.getImportance() ? 0 : 1);
 	}
 	
 	protected void takeDown() {
-		try {
-			DFService.deregister(this);
-			}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
 	}
 	
 	protected class Situation {
 		private int allies;
 		private int neutrals;
 		private int enemies;
+		private int severity;
 		private ArrayList<AID> troops;
 		public Situation() {
 			troops = new ArrayList<AID>();
+			severity = 0;
 		}
 		
 		public int getAllies() {
@@ -150,5 +205,15 @@ public class Leadership extends Agent {
 		public void setTroops(ArrayList<AID> troops) {
 			this.troops = troops;
 		}
+		public int getSeverity() {
+			return severity;
+		}
+		public void setSeverity(int severity) {
+			this.severity = severity;
+		}
+		public void addSeverity(int added) {
+			this.severity += added;
+		}
+		
 	}
 }
