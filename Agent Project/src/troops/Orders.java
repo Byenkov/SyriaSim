@@ -36,7 +36,7 @@ public class Orders implements java.io.Serializable{
 	}
 	
 	public void setDefaultISIS(){
-		stance = Stance.OFFENSIVE;
+		stance = Stance.MODERATE;
 		addEnemy(Allignment.USA);
 		addEnemy(Allignment.ASSAD);
 	}
@@ -79,5 +79,17 @@ public class Orders implements java.io.Serializable{
 	
 	public List<Allignment> getEnemies(){
 		return enemies;
+	}
+	
+	public void setAllies(List<Allignment> set){
+		allies.addAll(set);
+	}
+	
+	public void setNeutrals(List<Allignment> set){
+		neutrals.addAll(set);
+	}
+	
+	public void setEnemies(List<Allignment> set){
+		enemies.addAll(set);
 	}
 }

@@ -56,32 +56,11 @@ public class MilUnit extends Agent{
 		divisionInfo.setAllignment(allignment);
 		
 		location = ProvinceFactory.getProvince((String) args[0]);
-		
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd  = new ServiceDescription();
-		sd.setType("MilUnit");
-		sd.setName(getLocalName());
-		sd.setOwnership(allignment.toString());
-        dfd.addServices(sd);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
         
-        DFAgentDescription provinceTemp = new DFAgentDescription();
-		ServiceDescription provinceSd = new ServiceDescription();
-		provinceSd.setType("Province");
-		provinceSd.setName(location.getProvinceName());
-		provinceTemp.addServices(provinceSd);
-		DFAgentDescription[] result; 
-		try {
-			result = DFService.search(this, provinceTemp);
-			myProvince = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
+       	myProvince = new AID( location.getProvinceName(), AID.ISLOCALNAME);
         
         addBehaviour(new Activator());
+        addBehaviour(new Deactivator());
         addBehaviour(new DefenseBehaviour());
         addBehaviour(new AttackOrderReceiver());
         addBehaviour(new InfiltratorChecker());
@@ -89,6 +68,7 @@ public class MilUnit extends Agent{
         addBehaviour(new AirStrikeReceiver());
         addBehaviour(new FortifyOrderReceiver());
         addBehaviour(new TerrorizeOrderReceiver());
+        addBehaviour(new Reinforcement());
         addBehaviour(new WakerBehaviour(this, 3000){
 	        @Override	
         	public void onWake() {
@@ -105,15 +85,57 @@ public class MilUnit extends Agent{
 			mt = MessageTemplate.MatchConversationId("ActivateUnit");
 			ACLMessage msg= receive(mt);
 			if (msg != null){
+				String newLocation = msg.getContent();
+				myProvince = new AID( newLocation, AID.ISLOCALNAME);
+				location = ProvinceFactory.getProvince(newLocation);
 				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
 				msg1.setConversationId("ActivateUnit");
 				msg1.addReceiver(myProvince);
 				msg1.setContent("Mil");
 				send(msg1);
 				myCommand = msg.getSender();
+				addBehaviour(new ProvinceStrengthUpdate());
+				addBehaviour(new Cooldown(false));
 			}
 			else block();
 		}
+	}
+	
+	private class Deactivator extends CyclicBehaviour{
+		MessageTemplate mt;
+		
+		@Override
+		public void action() {
+			mt = MessageTemplate.MatchConversationId("DeactivateUnit");
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
+				msg1.setConversationId("DeactivateUnit");
+				msg1.addReceiver(myProvince);
+				msg1.setContent("Mil");
+				send(msg1);
+				addBehaviour(new Cooldown(true));
+			}
+			else block();
+		}
+	}
+	
+	
+	private class Cooldown extends OneShotBehaviour {
+		private String cooldown;
+		public Cooldown(boolean cooldown) {
+			this.cooldown = (cooldown) ? "On" : "Off";
+		}
+		
+		@Override
+		public void action() {
+			ACLMessage info = new ACLMessage(ACLMessage.INFORM);
+			info.setConversationId("Cooldown");
+			info.setContent(cooldown);
+			info.addReceiver(myCommand);
+			send(info);
+		}
+		
 	}
 	
 	private class StatusUpdate extends OneShotBehaviour {
@@ -130,6 +152,43 @@ public class MilUnit extends Agent{
 		}
 	}
 	
+	private class ProvinceStrengthUpdate extends OneShotBehaviour {
+
+		@Override
+		public void action() {
+			ACLMessage msg= new ACLMessage(ACLMessage.INFORM);
+			msg.setConversationId("Strength");
+			try {
+				msg.setContentObject(divisionInfo);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			msg.addReceiver(myProvince);
+			send(msg);
+		}
+		
+	}
+	
+	private class Reinforcement extends CyclicBehaviour {
+		MessageTemplate mt;
+		@Override
+		public void action() {
+			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Reinforcements"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				try {
+					Reinforcements reinforcements = (Reinforcements) msg.getContentObject();
+					divisionInfo.setManpower(divisionInfo.getManpower() + reinforcements.getManpower());
+					divisionInfo.setEquipment(divisionInfo.getEquipment() + reinforcements.getEquipment());
+					addBehaviour(new ProvinceStrengthUpdate());
+				} catch (UnreadableException e) {
+					e.printStackTrace();
+				}
+			}
+			else block();
+		}
+	}
+	
 	private class AttackOrderReceiver extends CyclicBehaviour {
 
 		@Override
@@ -143,10 +202,9 @@ public class MilUnit extends Agent{
 					if (received instanceof DivisionInfo) {
 						DivisionInfo targetInfo = (DivisionInfo) received;
 						AID target = targetInfo.getAid();
-						if (canAttack && !busy) myAgent.addBehaviour(new AttackBehaviour(myAgent, target, targetInfo.getPhases()));
+						if (canAttack) myAgent.addBehaviour(new AttackBehaviour(myAgent, target, targetInfo.getPhases()));
 					}
 				} catch (UnreadableException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}	
 			}
@@ -161,7 +219,11 @@ public class MilUnit extends Agent{
 			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Fortify"), MessageTemplate.MatchPerformative(ACLMessage.REQUEST));
 			ACLMessage msg= receive(mt);
 			if (msg != null){
-				if (!divisionInfo.isFortified()) addBehaviour(new Fortify(myAgent));
+				if (!divisionInfo.isFortified()) {
+					System.out.println(getLocalName() + "is fortifying");
+					addBehaviour(new Fortify(myAgent));
+					addBehaviour(new Cooldown(true));
+				}
 			}	
 			else block();
 		}		
@@ -172,7 +234,7 @@ public class MilUnit extends Agent{
 		private int phases;
 		
 		public AttackBehaviour(Agent a, AID targetID, int phases) {
-			super(a, 3000);
+			super(a, 1000);
 			this.targetID = targetID;
 			this.phases = phases;
 		}
@@ -192,12 +254,14 @@ public class MilUnit extends Agent{
 				send(msg);
 				canAttack = false;
 				busy = true;
+				addBehaviour(new Cooldown(true));
 				myAgent.addBehaviour(new WakerBehaviour(myAgent, 3000){
 					//Regrouping
 					@Override
 					public void onWake(){
 						canAttack = true;
 						busy = false;
+						addBehaviour(new Cooldown(false));
 					}
 				});
 			}
@@ -215,11 +279,13 @@ public class MilUnit extends Agent{
 		
 		@Override
 		public void onWake(){
-			canAttack = true;
-			busy = false;
+			canAttack = false;
+			busy = true;
+			addBehaviour(new Cooldown(true));
 			myAgent.addBehaviour(new WakerBehaviour(myAgent, time){
 				@Override
 				public void onWake(){
+					addBehaviour(new Cooldown(false));
 					canAttack = true;
 					busy = false;
 				}
@@ -238,6 +304,7 @@ public class MilUnit extends Agent{
 			if (msg != null ){
 				try {
 					if (!busy){
+						System.out.println(getLocalName() + " has been attacked by " + msg.getSender().getLocalName());
 						busy = true;
 						DivisionInfo enemyArmy = (DivisionInfo) msg.getContentObject();
 						
@@ -286,12 +353,14 @@ public class MilUnit extends Agent{
 									System.out.println(myAgent.getLocalName()+" escaped from " + msg.getSender().getLocalName());
 									busy = true;
 									canAttack = false;
-									myAgent.addBehaviour(new WakerBehaviour(myAgent, 20000){
+									addBehaviour(new Cooldown(true));
+									myAgent.addBehaviour(new WakerBehaviour(myAgent, 10000){
 										//Regrouping
 										@Override
 										public void onWake(){
 											canAttack = true;
 											busy = false;
+											addBehaviour(new Cooldown(false));
 										}
 									});
 								}
@@ -316,8 +385,9 @@ public class MilUnit extends Agent{
 					if (received instanceof DivisionInfo) divisionInfo = (DivisionInfo) received;
 					canAttack = false;
 					addBehaviour(new StatusUpdate());
+					addBehaviour(new ProvinceStrengthUpdate());
 					if (divisionInfo.getManpower() <= 0) addBehaviour(new KillAgent());
-					myAgent.addBehaviour(new Regroup(myAgent, 10000));
+					myAgent.addBehaviour(new Regroup(myAgent, 8000));
 				} catch (UnreadableException e) {e.printStackTrace();}
 				
 			}
@@ -348,6 +418,7 @@ public class MilUnit extends Agent{
 	
 					@Override
 					public void action() {
+						canAttack = true;
 						canTerrorize = false;
 						ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
 						msg.setConversationId("Terror");
@@ -366,16 +437,17 @@ public class MilUnit extends Agent{
 						double gainedManpower = new Random().nextInt(20)+20;
 						double gainedEquipment = new Random().nextInt(10)+10;
 						double gainedExperience = new Random().nextInt(9)+1;
-						System.out.println("\n------------------TERROR-----------------------\n"
+						location.setCurrentNews("\n---------TERROR---------\n"
 								+ getLocalName() + " has finished terrorizing local\npopulation and gained:\n" + 
 								"Manpower: " + gainedManpower
 								+ "\nEquipment: " + gainedEquipment
 								+ "\nExperience: " + gainedExperience
-								+"\n-----------------------------------------------\n");
+								+"\n------------------------\n");
 						divisionInfo.setManpower(divisionInfo.getManpower() + gainedManpower);
 						divisionInfo.setEquipment(divisionInfo.getEquipment() + gainedEquipment);
 						divisionInfo.setExperience(divisionInfo.getExperience() + gainedExperience);
 						canTerrorize = true;
+						addBehaviour(new ProvinceStrengthUpdate());
 						addBehaviour(new StatusUpdate());
 					}
 					
@@ -406,12 +478,12 @@ public class MilUnit extends Agent{
 				
 				addBehaviour(new StatusUpdate());
 					
-				System.out.println("\n---------------AIRSTRIKE---------------\n"+
+				location.setCurrentNews("\n----------AIRSTRIKE----------\n"+
 						myAgent.getLocalName()+" has been bombed and lost:"
 						+"\nManpower: " + manLosses.shortValue()
 						+"\nEquipment: " + equipmentLosses.shortValue()
-						+"\n---------------------------------------\n");
-				
+						+"\n-----------------------------\n");
+				addBehaviour(new ProvinceStrengthUpdate());
 				if (divisionInfo.getManpower() <= 0) addBehaviour(new KillAgent());
 			} else block();
 		}
@@ -424,7 +496,9 @@ public class MilUnit extends Agent{
 			super(a, 20000);
 			divisionInfo.setFortified(true);
 			canAttack = false;
+			location.setCurrentNews(getLocalName() + " is foritying while waiting for reinforcements\n");
 			addBehaviour(new StatusUpdate());
+			addBehaviour(new Cooldown(true));
 		}
 		
 		@Override
@@ -432,6 +506,7 @@ public class MilUnit extends Agent{
 			divisionInfo.setFortified(false);
 			canAttack = true;
 			addBehaviour(new StatusUpdate());
+			addBehaviour(new Cooldown(false));
 		}
 	}
 	
@@ -446,35 +521,20 @@ public class MilUnit extends Agent{
 			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Infiltration"), MessageTemplate.MatchPerformative(ACLMessage.REQUEST));
 			ACLMessage msg= receive(mt);
 			if (msg != null){
-				infiltratingAgents.add(msg.getSender());
-				addBehaviour(new InfiltratingAgent(myAgent, msg.getSender(), 5000));
+				//TODO check efficiency
+				float efficiency = 1f; //TODO add weather and skill conditions
+				//TODO randomize  bit
+				//TODO send back info
+				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
+				msg1.setConversationId("Infiltration");
+				msg1.addReceiver(msg.getSender());
+				try {
+					msg1.setContentObject(divisionInfo);
+				} catch (IOException e) {e.printStackTrace();}
+				send(msg1);
 			}
 			else block();
 		}		
-	}
-	
-	private class InfiltratingAgent extends TickerBehaviour{
-		private AID aid;
-		
-		public InfiltratingAgent(Agent a, AID aid, long period) {
-			super(a, period);
-			this.aid = aid;
-		}
-
-		@Override
-		protected void onTick() {
-			//TODO check efficiency
-			float efficiency = 1f; //TODO add weather and skill conditions
-			//TODO randomize  bit
-			//TODO send back info
-			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
-			msg.setConversationId("Infiltration");
-			msg.addReceiver(aid);
-			try {
-				msg.setContentObject(divisionInfo);
-			} catch (IOException e) {e.printStackTrace();}
-			send(msg);
-		}	
 	}
 	
 	private class KillAgent extends OneShotBehaviour {
@@ -483,6 +543,7 @@ public class MilUnit extends Agent{
 		public void action() {
 			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
 			msg.addReceiver(myCommand);
+			msg.addReceiver(myProvince);
 			msg.setConversationId("KillMSG");
 			send(msg);
 			doDelete();
@@ -494,11 +555,5 @@ public class MilUnit extends Agent{
 	}
 	
 	public void deregister(){
-		try {
-			DFService.deregister(this);
-			}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
 	}
 }

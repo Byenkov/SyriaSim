@@ -22,7 +22,9 @@ import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
 import jade.lang.acl.UnreadableException;
 import map.Province;
+import map.ProvinceFactory;
 import troops.StatusReport;
+import troops.RecoUnit.OrderReceiver;
 
 public class MainUnit extends Agent {
 	private Allignment allignment;
@@ -38,6 +40,7 @@ public class MainUnit extends Agent {
 	private AID milUnit;
 	private AID province;
 	
+	private boolean canAttack;
 	private boolean airStrikeAvailable;
 	
 	protected void setup(){
@@ -46,6 +49,10 @@ public class MainUnit extends Agent {
 		if (((String) args[1]).equals("ASSAD")) this.allignment = Allignment.ASSAD;
 		if (((String) args[1]).equals("USA")) this.allignment = Allignment.USA;
 		if (((String) args[1]).equals("ISIS")) this.allignment = Allignment.ISIS;
+		
+		others = new ArrayList<DivisionInfo>();
+		
+		canAttack = true;
 		
 		location = map.ProvinceFactory.getProvince((String) args[0]);
 		orders = new Orders();
@@ -57,17 +64,20 @@ public class MainUnit extends Agent {
 		
 		airStrikeAvailable = true;
 		
-		registerAgent();
 		setMyAgents();
 		
 		addBehaviour(new AgentActivator());
+		addBehaviour(new RecoUpdater());
 		addBehaviour(new RecoHandler());
+        addBehaviour(new OrderReceiver());
+        addBehaviour(new CooldownReceiver());
+		addBehaviour(new ChangeLocation());
 		addBehaviour(new LocalSituationReport());
 		addBehaviour(new DivisionStatusUpdater());
 		addBehaviour(new AgentKill());
 		addBehaviour(new AirStrikeReSupply(this));
 		addBehaviour(new CallForHelpReceiver());
-		
+		addBehaviour(new Reinforcement());
 		addBehaviour(new WakerBehaviour(this, 3000) { 
 			@Override
 			public void onWake(){
@@ -112,7 +122,7 @@ public class MainUnit extends Agent {
 		public DefensiveManager(){
 			
 			this.registerFirstState(new CheckSituation(myAgent), "CheckSituation");	
-			this.registerState(new CallForHelp(2), "CallForHelp");		
+			this.registerState(new CallHelp(2), "CallForHelp");		
 			this.registerState(new Fortify(), "Fortify");		
 			this.registerLastState(new OverManager(), "OverManager");
 			
@@ -131,8 +141,8 @@ public class MainUnit extends Agent {
 		public ModerateManager(){
 			
 			this.registerFirstState(new CheckSituation(myAgent), "CheckSituation");		
-			this.registerState(new CallForHelp(1), "CallForHelp1");
-			this.registerState(new CallForHelp(2), "CallForHelp2");		
+			this.registerState(new CallHelp(1), "CallForHelp1");
+			this.registerState(new CallHelp(2), "CallForHelp2");		
 			this.registerState(new Fortify(), "Fortify");	
 			this.registerState(new RequestTargets(), "RequestTargets");		
 			this.registerState(new Terrorize(), "Terrorize");		
@@ -165,14 +175,13 @@ public class MainUnit extends Agent {
 		public OffensiveManager(){
 			
 			this.registerFirstState(new CheckSituation(myAgent), "CheckSituation");			
-			this.registerState(new CallForHelp(2), "CallForHelp");			
+			this.registerState(new CallHelp(2), "CallForHelp");			
 			this.registerState(new RequestTargets(), "RequestTargets");			
 			this.registerState(new RequestAttack(orders.getStance()), "RequestAttack");		
 			this.registerState(new Terrorize(), "Terrorize");	
 			this.registerLastState(new OverManager(), "OverManager");
 			
-			this.registerTransition("CheckSituation", "CallForHelp", 1);		
-			this.registerTransition("CheckSituation", "CallForHelp", 2);
+			this.registerTransition("CheckSituation", "CallForHelp", 1);
 			
 			if (allignment == Allignment.ISIS){
 				this.registerDefaultTransition("CallForHelp", "Terrorize");
@@ -182,6 +191,7 @@ public class MainUnit extends Agent {
 			}
 			
 			
+			this.registerTransition("CheckSituation", "RequestTargets", 2);
 			this.registerTransition("CheckSituation", "RequestTargets", 3);
 			this.registerTransition("CheckSituation", "RequestTargets", 4);
 			
@@ -198,7 +208,7 @@ public class MainUnit extends Agent {
 		}
 
 		@Override
-		protected void onTick() {			
+		protected void onTick() {
 			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
 			msg.setConversationId("StatusReport");
 			msg.addReceiver(leadership);
@@ -211,22 +221,29 @@ public class MainUnit extends Agent {
 		}		
 	}
 	
-	private class CallForHelp extends OneShotBehaviour {
-		private int severity;
+	private class CallHelp extends OneShotBehaviour {
+		private Integer severity;
 		//1 - low
 		//2 - high
 		
-		public CallForHelp(int severity){
+		public CallHelp(int severity){
 			this.severity = severity;
 		}
 		
 		@Override
 		public void action() {
 			ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
-			msg.setContent(String.valueOf(severity));
+			CallForHelp cfh = new CallForHelp();
+			cfh.setLocation(location.getProvinceName());
+			cfh.setSeverity(severity);
+			try {
+				msg.setContentObject(cfh);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 			msg.setConversationId("CallForHelp");
 			msg.addReceiver(leadership);
-			send(msg);
+			if (severity != null) send(msg);
 		}	
 	}
 	
@@ -236,11 +253,11 @@ public class MainUnit extends Agent {
 		//2 - could use some help
 		//3 - balanced
 		//4 - optimistic
-		
+
 		private double enemyStrength;
 		private double alliedStrength;
 		private double neutralStrength;
-
+		
 		public CheckSituation(Agent a) {
 			super(a, 1000);
 			addBehaviour(new RequestTargets());
@@ -248,8 +265,9 @@ public class MainUnit extends Agent {
 
 		@Override
 		public void onWake() {
+			if (!others.isEmpty()){
 			enemyStrength = 0;
-			alliedStrength = divisionInfo.getStrength();
+			alliedStrength = 0;
 			neutralStrength = 0;
 			
 			for (int i = 0; i < others.size(); i++){
@@ -261,23 +279,39 @@ public class MainUnit extends Agent {
 			}
 			
 			if (enemyStrength > 1.15*alliedStrength) {
-				if (alliedStrength + neutralStrength > enemyStrength) situation = 2;
+				if (alliedStrength + neutralStrength > enemyStrength) situation = 3;
 				else situation = 1;
 			} else if (enemyStrength >= 0.85*alliedStrength && enemyStrength <= 1.15*alliedStrength){
-				if (enemyStrength > alliedStrength) situation = 2;
-				else situation = 1;
+				if (enemyStrength > alliedStrength) situation = 3;
+				else situation = 2;
 			} else situation = 4;
 			
 			report.setAllied((int) alliedStrength);
 			report.setNeutral((int) neutralStrength);
 			report.setEnemy((int) enemyStrength);
 			report.setSituation(situation);
-			
+
+//			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+//			msg.setConversationId("Status");
+//			try {
+//				System.out.println(getLocalName() + "sending");
+//				msg.setContentObject(new Double(alliedStrength));
+//				msg.setEncoding(allignment.toString());
+//			} catch (IOException e) { e.printStackTrace(); }
+//			msg.addReceiver(province);
+//			send(msg);
 //			System.out.println(getLocalName() + ": "+  situation + "\nAllied: " + alliedStrength + "\nNeutral: " + neutralStrength + "\nEnemy: " + enemyStrength);
+			} else {
+				situation = 4;
+				enemyStrength = 0;
+				if (divisionInfo != null) alliedStrength = divisionInfo.getStrength();
+				neutralStrength = 0;
+			}
 		}
 		
 		@Override
-		public int onEnd(){
+		public int onEnd(){		
+			
 			return situation;
 		}
 		
@@ -321,6 +355,67 @@ public class MainUnit extends Agent {
 		
 	}
 	
+	private class CooldownReceiver extends CyclicBehaviour {
+
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Cooldown"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg = receive(mt);
+			if (msg != null){
+				String msgContent = msg.getContent();
+				canAttack = (msgContent.equals("On")) ? false : true;
+			} else block();
+		}
+		
+	}
+	
+	private class RecoUpdater extends CyclicBehaviour {
+
+		@SuppressWarnings("unchecked")
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("RecoReport"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg = receive(mt);
+			if (msg != null){
+				try {
+					others = (ArrayList<DivisionInfo>) msg.getContentObject();
+				} catch (UnreadableException e) { e.printStackTrace(); }
+			} else block();
+		}
+		
+	}
+	
+	private class ChangeLocation extends CyclicBehaviour {
+
+		@SuppressWarnings({ "unchecked", "rawtypes" })
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("ChangeLocation"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				String target = msg.getContent();
+				location.setCurrentNews(getLocalName() + " is being relocated to " + province.getLocalName() + "\n");
+				location = ProvinceFactory.getProvince(target);
+				ACLMessage oldProvince = new ACLMessage(ACLMessage.INFORM);
+				oldProvince.addReceiver(milUnit);
+				oldProvince.addReceiver(recoUnit);
+				oldProvince.addReceiver(province);
+				oldProvince.setConversationId("DeactivateUnit");
+				send(oldProvince);
+				province = new AID( target, AID.ISLOCALNAME);
+				ACLMessage newProvince = new ACLMessage(ACLMessage.INFORM);
+				newProvince.setContent(target);
+				newProvince.addReceiver(milUnit);
+				newProvince.addReceiver(recoUnit);
+				newProvince.addReceiver(province);
+				newProvince.setConversationId("ActivateUnit");
+				others.clear();
+				send(newProvince);
+				location.setCurrentNews(getLocalName() + " has just arrived\n");
+			} else block();	
+		}
+	}
+	
 	private class LocalSituationReport extends CyclicBehaviour {
 
 		@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -357,6 +452,10 @@ public class MainUnit extends Agent {
 				if (!neutrals){
 					if (orders.getNeutrals().contains(receivers.get(i).getAllignment())) receivers.remove(i);
 				}
+			}
+			
+			if (receivers.isEmpty()) {
+				addBehaviour(new SendAttackOrder(target, 1));
 			}
 			
 			ACLMessage order = new ACLMessage(ACLMessage.REQUEST);
@@ -425,7 +524,7 @@ public class MainUnit extends Agent {
 					double myStrength = divisionInfo.getStrength();
 					int situation;
 					double enemyStrength = 0;
-					double alliedStrength = divisionInfo.getStrength();
+					double alliedStrength = 0;
 					double neutralStrength = 0;
 					
 					for (int i = 0; i < others.size(); i++){
@@ -588,10 +687,33 @@ public class MainUnit extends Agent {
 		
 	}
 	
+	private class Reinforcement extends CyclicBehaviour {
+		MessageTemplate mt;
+		@Override
+		public void action() {
+			mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Reinforcements"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				try {
+					Reinforcements reinforcements = (Reinforcements) msg.getContentObject();
+					location.setCurrentNews(getLocalName() + " has received reinforcements: "
+							+ "\nManpower: " + reinforcements.getManpower()
+							+ "\nEquipment: " + reinforcements.getEquipment() + "\n");
+					divisionInfo.setManpower(divisionInfo.getManpower() + reinforcements.getManpower());
+					divisionInfo.setEquipment(divisionInfo.getEquipment() + reinforcements.getEquipment());
+				} catch (UnreadableException e) {
+					e.printStackTrace();
+				}
+			}
+			else block();
+		}
+	}
+	
 	private class Fortify extends OneShotBehaviour {
 
 		@Override
 		public void action() {
+			if (getLocalName().equals("us1tar")) System.out.println("Fortify");
 			ACLMessage msg = new ACLMessage(ACLMessage.REQUEST );
 			msg.setConversationId("Fortify");
 			msg.addReceiver(milUnit);
@@ -619,51 +741,10 @@ public class MainUnit extends Agent {
 	}
 	
 	protected void setMyAgents(){
-		DFAgentDescription templateLead = new DFAgentDescription();
-		ServiceDescription sdLead = new ServiceDescription();
-		sdLead.setType("Leadership");
-		sdLead.setName(allignment.toString());
-		templateLead.addServices(sdLead);
-		DFAgentDescription[] result; 
-		try {
-			result = DFService.search(this, templateLead);
-			leadership = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
-		DFAgentDescription templateReco = new DFAgentDescription();
-		ServiceDescription sdReco = new ServiceDescription();
-		sdReco.setType("RecoUnit");
-		sdReco.setName(getLocalName()+"RecoUnit");
-		templateReco.addServices(sdReco);
-		try {
-			result = DFService.search(this, templateReco);
-			recoUnit = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
-		DFAgentDescription templateMil = new DFAgentDescription();
-		ServiceDescription sdMil = new ServiceDescription();
-		sdMil.setType("MilUnit");
-		sdMil.setName(getLocalName()+"MilUnit");
-		templateMil.addServices(sdMil);
-		try {
-			result = DFService.search(this, templateMil);
-			milUnit = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
-		DFAgentDescription templateProv = new DFAgentDescription();
-		ServiceDescription sdProv = new ServiceDescription();
-		sdProv.setType("Province");
-		sdProv.setName(location.getProvinceName());
-		templateProv.addServices(sdProv);
-		try {
-			result = DFService.search(this, templateProv);
-			province = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
+		leadership = new AID( allignment.toString(), AID.ISLOCALNAME);
+		recoUnit = new AID( getLocalName() + "RecoUnit", AID.ISLOCALNAME);
+		milUnit = new AID( getLocalName() + "MilUnit", AID.ISLOCALNAME);
+		province = new AID( location.getProvinceName(), AID.ISLOCALNAME);
 	}
 	
 	private class AirStrikeReSupply extends TickerBehaviour {
@@ -676,16 +757,34 @@ public class MainUnit extends Agent {
 		}	
 	}
 	
+	protected class OrderReceiver extends CyclicBehaviour {
+
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Orders"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg = receive(mt);
+			if (msg != null){
+				try {
+					orders = (Orders) msg.getContentObject();
+				} catch (UnreadableException e) {
+					e.printStackTrace();
+				}
+			} else block();
+			
+		}
+		
+	}
+	
 	protected class AgentActivator extends OneShotBehaviour{
 
 		@Override
 		public void action() {
 			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
 			msg.setConversationId("ActivateUnit");
-			msg.addReceiver(recoUnit);
 			msg.addReceiver(milUnit);
+			msg.addReceiver(recoUnit);
 			msg.addReceiver(province);
-			msg.setContent("Main");
+			msg.setContent(location.getProvinceName());
 			send(msg);
 		}
 	}
@@ -697,10 +796,15 @@ public class MainUnit extends Agent {
 			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("KillMSG"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
 			ACLMessage msg = receive(mt);
 			if (msg != null){
+				ArrayList<DivisionInfo> allies = new ArrayList<DivisionInfo>();
+				for (int i = 0; i < others.size(); i++){
+					if (others.get(i).getAllignment() != allignment) others.remove(i);
+				}
 				ACLMessage inf = new ACLMessage(ACLMessage.INFORM);
 				inf.setConversationId("KillMSG");
 				inf.addReceiver(province);
 				inf.addReceiver(recoUnit);
+				inf.addReceiver(leadership);
 				send(inf);
 				doDelete();
 			} else block();
@@ -709,24 +813,6 @@ public class MainUnit extends Agent {
 	}
 	
 	protected void takeDown() {
-		try {
-			DFService.deregister(this);
-			}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
 	}
-	
-	public void registerAgent(){
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd = new ServiceDescription();;
-		sd.setType("MainUnit");
-		sd.setName(getLocalName());
-		sd.setOwnership(allignment.toString());;
-        dfd.addServices(sd);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
-	}
+
 }

@@ -62,41 +62,15 @@ public class RecoUnit extends Agent {
 		
 		location = ProvinceFactory.getProvince((String) args[0]);
 		
-		DFAgentDescription dfd = new DFAgentDescription();
-		dfd.setName(getAID());
-		ServiceDescription sd  = new ServiceDescription();
-		sd.setType("RecoUnit");
-		sd.setName(getLocalName());
-		sd.setOwnership(allignment.toString());
-        dfd.addServices(sd);
-        try {
-			DFService.register(this,dfd);
-		} catch (FIPAException e) {e.printStackTrace();}
+		province = new AID( location.getProvinceName(), AID.ISLOCALNAME);
         
-
-		DFAgentDescription[] result; 
-		DFAgentDescription templateProv = new DFAgentDescription();
-		ServiceDescription sdProv = new ServiceDescription();
-		sdProv.setType("Province");
-		sdProv.setName(location.getProvinceName());
-		templateProv.addServices(sdProv);
-		try {
-			result = DFService.search(this, templateProv);
-			province = result[0].getName();
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
-        
-        addBehaviour(new Activator());
+		addBehaviour(new Activator());
+        addBehaviour(new Deactivator());
+        addBehaviour(new OrderReceiver());
 		addBehaviour(new InfiltratorChecker());
 		addBehaviour(new InfiltrationInfoUpdater());
-        addBehaviour(new WakerBehaviour(this, 500) {
-        	public void onWake(){
-        		myAgent.addBehaviour(new InitialAgentFinder());
-        	}
-		});
+        addBehaviour(new InitialAgentFinder());
         addBehaviour(new OrderHandler());
-        
         AMSSubscriber myAMSSubscriber = new AMSSubscriber() {
         	protected void installHandlers(Map handlers) {
 	        	// Associate an handler to born-agent events
@@ -122,7 +96,32 @@ public class RecoUnit extends Agent {
         	}
         };
         addBehaviour(myAMSSubscriber);
+        addBehaviour(new TickerBehaviour(this, 3000) {
+			
+			@Override
+			protected void onTick() {
+				addBehaviour(new InitialAgentFinder());
+			}
+		});
         addBehaviour(new AgentKill());
+	}
+	
+	protected class OrderReceiver extends CyclicBehaviour {
+
+		@Override
+		public void action() {
+			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Orders"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
+			ACLMessage msg = receive(mt);
+			if (msg != null){
+				try {
+					orders = (Orders) msg.getContentObject();
+				} catch (UnreadableException e) {
+					e.printStackTrace();
+				}
+			} else block();
+			
+		}
+		
 	}
 	
 	protected class OrderHandler extends CyclicBehaviour {
@@ -146,13 +145,24 @@ public class RecoUnit extends Agent {
 		
 	}
 	
+	protected class StatusReport extends OneShotBehaviour {
+
+		@Override
+		public void action() {
+				ACLMessage report = new ACLMessage(ACLMessage.INFORM);
+				report.setConversationId("RecoReport");
+				try {
+					report.setContentObject(knownMilUnits.values().toArray());
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				send(report);
+		}
+	}
+	
 	protected class InitialAgentFinder extends SequentialBehaviour{
-		private List<AID> searchedMilAgents;
-		private List<AID> searchedRecoAgents;
 		
 		public InitialAgentFinder(){
-			searchedMilAgents = new ArrayList<AID>();
-			searchedRecoAgents = new ArrayList<AID>();
 			
 			//Request orders if none are available
 			addSubBehaviour(new OneShotBehaviour() {
@@ -285,6 +295,7 @@ public class RecoUnit extends Agent {
 					if (content instanceof DivisionInfo){
 						DivisionInfo addedMil = (DivisionInfo) content;
 						knownMilUnits.put(msg.getSender(), addedMil);
+						addBehaviour(new StatusReport());
 					}
 				} catch (UnreadableException e) {e.printStackTrace();}
 			}
@@ -313,7 +324,6 @@ public class RecoUnit extends Agent {
 			thisReco.setNeutrals(neutrals);
 			thisReco.setAllignment(allignment);
 			thisReco.setOrders(orders);
-			//TODO send back info
 			ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
 			msg.setConversationId("Infiltration");
 			msg.addReceiver(aid);
@@ -325,41 +335,47 @@ public class RecoUnit extends Agent {
 		
 	}
 	
-	
-	public ArrayList<AID> searchAID(Agent agent, String type, Allignment ownership){
-		ArrayList<AID> returned = new ArrayList<AID>();
-		DFAgentDescription template = new DFAgentDescription();
-		ServiceDescription sd = new ServiceDescription();
-		sd.setType(type+"@"+location.getProvinceName());
-		sd.setOwnership(ownership.toString());
-		template.addServices(sd);
-		try {
-			List<DFAgentDescription> dfList = (Arrays.asList(DFService.search(agent, template)));
-			for (DFAgentDescription df : dfList){
-				returned.add(df.getName());
-			}
-		} catch (FIPAException e) {
-			e.printStackTrace();
-		}
-		return returned;
-	}
-	
 	private class Activator extends CyclicBehaviour{
 		MessageTemplate mt;
+		
 		@Override
 		public void action() {
 			mt = MessageTemplate.MatchConversationId("ActivateUnit");
 			ACLMessage msg= receive(mt);
 			if (msg != null){
-				myCommand =msg.getSender();
+				knownMilUnits.clear();
+				knownRecoUnits.clear();
+				knownAgents.clear();
+				String newLocation = msg.getContent();
+				province = new AID( newLocation, AID.ISLOCALNAME);
+				location = ProvinceFactory.getProvince(newLocation);
 				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
 				msg1.setConversationId("ActivateUnit");
 				msg1.addReceiver(province);
 				msg1.setContent("Reco");
 				send(msg1);
+				myCommand = msg.getSender();
 			}
 			else block();
-		}	
+		}
+	}
+	
+	private class Deactivator extends CyclicBehaviour{
+		MessageTemplate mt;
+		
+		@Override
+		public void action() {
+			mt = MessageTemplate.MatchConversationId("DeactivateUnit");
+			ACLMessage msg= receive(mt);
+			if (msg != null){
+				ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
+				msg1.setConversationId("DeactivateUnit");
+				msg1.addReceiver(province);
+				msg1.setContent("Reco");
+				send(msg1);
+			}
+			else block();
+		}
 	}
 	
 	private class AgentKill extends CyclicBehaviour {
@@ -369,6 +385,10 @@ public class RecoUnit extends Agent {
 			MessageTemplate mt = MessageTemplate.and(MessageTemplate.MatchConversationId("KillMSG"), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
 			ACLMessage msg = receive(mt);
 			if (msg != null){
+				ACLMessage message = new ACLMessage(ACLMessage.INFORM);
+				message.addReceiver(province);
+				message.setConversationId("KillMSG");
+				send(message);
 				doDelete();
 			} else block();
 			
@@ -376,16 +396,5 @@ public class RecoUnit extends Agent {
 	}
 	
 	protected void takeDown() {
-		deregister();
-	}
-
-	
-	public void deregister(){
-		try {
-			DFService.deregister(this);
-			}
-		catch (FIPAException fe) {
-			fe.printStackTrace();
-		}
 	}
 }

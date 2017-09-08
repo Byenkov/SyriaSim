@@ -13,7 +13,7 @@ public final class ProvinceFactory {
 			case "Hama": return Hama.getInstance();
 			case "Homs": return Homs.getInstance();
 			case "Latakia": return Latakia.getInstance();
-			case "Idlib": return Latakia.getInstance();
+			case "Idlib": return Idlib.getInstance();
 			case "Quneitra": return Quneitra.getInstance();
 			case "Rif_Dimashq": return Rif_Dimashq.getInstance();
 			case "Tartus": return Tartus.getInstance();

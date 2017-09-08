@@ -11,4 +11,8 @@ public enum Importance {
 	private Importance(int value){
 		this.value = value;
 	}
+	
+	public int getValue(){
+		return value;
+	}
 }

@@ -2,13 +2,22 @@ package map;
 
 import java.util.HashMap;
 
+import provinces.Weather;
+import troops.Allignment;
+
 public class Al_Hasakah implements Province{
-	public final Importance importance = Importance.SECONDARY;
+	private Allignment controller; 
+	private double usaStrength;
+	private double assadStrength;
+	private double isisStrength;
+	private final Importance importance = Importance.SECONDARY;
 	private int population = 1512000;
 	private static Al_Hasakah instance = null;
 	private final int unitLimit = 5;
 	private int unitNumber = 0;
 	private final String provinceName = "Al_Hasakah";
+	private String currentNews;
+	private Weather weather;
 	private HashMap<String,Integer> neighbors = new HashMap<String,Integer>();
 	//private List<NazwaKlasyJednostek> unitsList = new ArrayList<Nazwa>();
 	   protected Al_Hasakah() {setNeighbors();}
@@ -40,5 +49,55 @@ public class Al_Hasakah implements Province{
 		}
 		public void setPopulation(int population) {
 			this.population = population;
+		}
+		public Importance getImportance() {
+			return importance;
+		}
+		public Allignment getController() {
+			return controller;
+		}
+		public void setController(Allignment controller) {
+			this.controller = controller;
+		}
+		public double getStrength(String allignment) {
+			switch (allignment){
+			case "ASSAD":
+				return assadStrength;
+			case "USA":
+				return usaStrength;
+			case "ISIS":
+				return isisStrength;
+			}
+			return 0.0;
+		}
+		public void setStrength(String allignment, double strength) {
+			switch (allignment){
+			case "ASSAD":
+				assadStrength = strength;
+				break;
+			case "USA":
+				usaStrength = strength;
+				break;
+			case "ISIS":
+				isisStrength = strength;
+				break;
+			}
+			if (assadStrength > usaStrength && assadStrength > isisStrength) controller = Allignment.ASSAD;
+			if (usaStrength > assadStrength && usaStrength > isisStrength) controller = Allignment.USA;
+			if (isisStrength > usaStrength && isisStrength > assadStrength) controller = Allignment.ISIS;
+		}
+		@Override
+		public String getCurrentNews() {
+			return currentNews;
+		}
+		@Override
+		public void setCurrentNews(String currentNews) {
+			this.currentNews = currentNews;
+		}
+		public Weather getWeather() {
+			return weather;
+		}
+		public void setWeather(Weather weather) {
+			this.weather = weather;
 		}
 	}

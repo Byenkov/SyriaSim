@@ -29,7 +29,7 @@ public class Battle {
 	}
 	
 	public void runBattle(){
-		int n = (defender.isFortified()) ? 10 : 1;
+		int n = (defender.isFortified()) ? 4 : 1;
 		phase(3.60*n,3.5*n);
 		if (phases > 1) phase(4.55*n,4.58*n);
 		if (phases > 2) phase(4.15*n,4.10*n);
@@ -73,14 +73,14 @@ public class Battle {
 		if (phases == 1) name = "Encounter in ";
 		if (phases == 2) name = "Skirmish in ";
 		if (phases == 3) name = "Battle of ";
-		return 	"\n------------"+ name + provinceName+"------------\n"
+		return 	"\n----"+ name + provinceName+"----\n"
 				+ "  Attacker: "+attacker.getAid().getLocalName()+":\n"
 					+ "    Quantity: " + attackerStartingManpower+"\n"
 					+ "    Remaining: "+ ((attacker.getManpower() > 0) ? attacker.getManpower() : 0)+"\n"
 				+ "  Defender: "+defender.getAid().getLocalName()+"\n"
 					+ "    Quantity: " + defenderStartingManpower +"\n"
 					+ "    Remaining: "+ ((defender.getManpower() > 0) ? defender.getManpower() : 0) +"\n"
-				+"-----------------------------------------\n";
+				+"---------------------------";
 	}
 	
 	
